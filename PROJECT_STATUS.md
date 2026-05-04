@@ -1,0 +1,40 @@
+# Source S4 — Product Status
+*Last updated: 2026-05-04*
+
+## What's live in production
+
+- **Invoice Processing** — Users upload a PDF invoice and the system automatically reads it, identifies the vendor, finds the right account number, and saves all the data. No manual data entry required for standard invoices.
+- **Contract Processing** — Users upload a PDF contract and the system extracts key fields (vendor, dates, value, renewal terms, cancellation notice) and stores them in a searchable database.
+- **Vendor Match Resolution** — When the system can't confidently identify a vendor from a document, the user can confirm the correct vendor or add a new one directly from the UI. The system learns from each correction.
+- **Reconciliation** — Matches processed invoices against expected charges to flag discrepancies.
+
+## What's in development
+
+- Vendor match status badges and warning indicators in the invoice and contract views, so users can see at a glance which records need vendor review.
+- UI workflow for confirming or overriding a vendor match directly from the invoice detail page.
+
+## What's coming next
+
+- Support for contracts that span multiple documents (e.g. an Order Form that references a separate Master Agreement and Terms). Currently the system only reads one PDF at a time.
+- Usage tracking per client — visibility into how many documents each client has processed and estimated costs.
+- Second client onboarding — the system is architected for multiple clients but has only been configured for one so far.
+
+## Where your input would help
+
+- **Vendor match thresholds** — when the system is 50–84% confident on a vendor match, it flags it as "pending" for manual review. Is that the right cutoff, or should the team review everything below 85%?
+- **Contract description quality** — for simple order forms, the AI tends to describe the document rather than the underlying service. Worth fixing before showing contracts to more users?
+- **Reconciliation scope** — what does a "discrepancy" mean to the business? The module exists but the rules for what counts as a match vs. a mismatch need business input.
+- **Second client readiness** — are there specific data fields or workflow differences the next client will need that we should design for now?
+
+## Recent changes
+
+- Vendor matching now works for both invoices and contracts — the system identifies vendors on upload and flags ones it's unsure about.
+- Admin vs. member roles are now enforced — only admins can delete records or change system settings.
+- The backend codebase now has version control and is backed up to a private GitHub repository.
+- Security hardening completed — unauthorized users can no longer access internal functions or other clients' data.
+- All pending differences between the staging and production environments have been resolved — both are now identical.
+
+ 
+.
+.
+.
