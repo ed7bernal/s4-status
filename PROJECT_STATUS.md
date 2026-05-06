@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-04*
+*Last updated: 2026-05-06*
 
 ## What's live in production
 
@@ -7,6 +7,13 @@
 - **Contract Processing** — Users upload a PDF contract and the system extracts key fields (vendor, dates, value, renewal terms, cancellation notice) and stores them in a searchable database.
 - **Vendor Match Resolution** — When the system can't confidently identify a vendor from a document, the user can confirm the correct vendor or add a new one directly from the UI. The system learns from each correction.
 - **Reconciliation** — Matches processed invoices against expected charges to flag discrepancies.
+
+## What's in staging (not yet in production)
+
+- **Inventory Upload** — Batch upload pipeline for contracts and invoices. Users submit a set of PDF files; the system processes each independently (OCR, extraction, vendor matching) and reconciles vendor status across the batch when all items finish. Edge functions: `process-inventory-upload`, `process-inventory-document`, `check-batch-complete`, `reconcile-inventory-batch`. Migration 20260506000002 (queued status constraint on `inventory_upload_items`) applied to staging.
+- **Vendor Merge** — Merges a duplicate inventory-created vendor into a canonical vendor, moving all related records (contracts, invoices, accounts, aliases) and adding the duplicate name as an alias for future auto-matching. Edge function: `merge-vendors`.
+
+**Pending before production deploy:** full end-to-end staging validation of the inventory upload flow, then deploy all four inventory functions and `merge-vendors` to production.
 
 ## What's in development
 
@@ -28,16 +35,9 @@
 
 ## Recent changes
 
+- Inventory upload pipeline built and deployed to staging — batch PDF processing with orchestrator + worker pattern, polling UI, and per-item error display.
+- Vendor merge function built and deployed to staging — merges inventory-created vendors into canonical vendors.
 - Vendor matching now works for both invoices and contracts — the system identifies vendors on upload and flags ones it's unsure about.
 - Admin vs. member roles are now enforced — only admins can delete records or change system settings.
 - The backend codebase now has version control and is backed up to a private GitHub repository.
 - Security hardening completed — unauthorized users can no longer access internal functions or other clients' data.
-- All pending differences between the staging and production environments have been resolved — both are now identical.
-
- 
-.
-.
-.
-.
-updated
-.
