@@ -28,6 +28,7 @@
 
 ## Where your input would help
 
+- **Inventory upload staging validation** — the pipeline is deployed and the UI is wired up (polling, error display). When should we do a full end-to-end test before promoting to production?
 - **Vendor match thresholds** — when the system is 50–84% confident on a vendor match, it flags it as "pending" for manual review. Is that the right cutoff, or should the team review everything below 85%?
 - **Contract description quality** — for simple order forms, the AI tends to describe the document rather than the underlying service. Worth fixing before showing contracts to more users?
 - **Reconciliation scope** — what does a "discrepancy" mean to the business? The module exists but the rules for what counts as a match vs. a mismatch need business input.
