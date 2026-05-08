@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-08*
 
 ## What's live in production
 
@@ -28,7 +28,7 @@
 
 ## Where your input would help
 
-- **Inventory upload staging validation** — the pipeline is deployed and the UI is wired up (polling, error display). When should we do a full end-to-end test before promoting to production?
+- **Inventory upload staging validation** — the pipeline auth bug has been fixed (see recent changes). Ready for a full end-to-end test before promoting to production.
 - **Vendor match thresholds** — when the system is 50–84% confident on a vendor match, it flags it as "pending" for manual review. Is that the right cutoff, or should the team review everything below 85%?
 - **Contract description quality** — for simple order forms, the AI tends to describe the document rather than the underlying service. Worth fixing before showing contracts to more users?
 - **Reconciliation scope** — what does a "discrepancy" mean to the business? The module exists but the rules for what counts as a match vs. a mismatch need business input.
@@ -36,6 +36,12 @@
 
 ## Recent changes
 
+- Fixed a critical bug in the inventory upload pipeline that was preventing documents from being processed — items were getting stuck in "pending" status and never moving forward.
+- Root cause was a bad internal authentication token stored in Supabase project settings that couldn't be corrected (Supabase won't allow overwriting reserved key names via CLI). Resolved by introducing a dedicated internal secret (`INTERNAL_WORKER_SECRET`) that all four inventory pipeline functions now use to authenticate with each other.
+- Also fixed a separate issue where the dispatch step was running in the background after the initial response was sent — the function could shut down before dispatching workers to any documents. Dispatch is now guaranteed to complete before the response is returned.
+- Confirmed that `inventory_uploads.status` is correctly set to `completed` at the end of the pipeline (by `reconcile-inventory-batch`) — no logic was missing there.
+- Confirmed that `merge-vendors` edge function exists and has a working UI in the frontend (`MergeVendorDialog`).
+- Reviewed the full contracts, vendors, and invoices table schemas. Fields for licenses/seats, active users, delivery method, business sponsor, and business group do not exist yet — these would need new migrations if required.
 - Inventory upload pipeline built and deployed to staging — batch PDF processing with orchestrator + worker pattern, polling UI, and per-item error display.
 - Vendor merge function built and deployed to staging — merges inventory-created vendors into canonical vendors.
 - Vendor matching now works for both invoices and contracts — the system identifies vendors on upload and flags ones it's unsure about.
