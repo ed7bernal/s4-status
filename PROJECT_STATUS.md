@@ -1,58 +1,57 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-12*
+*Last updated: 2026-05-13*
 
 ## What's live in production
 
 - **Invoice Processing** — Users upload a PDF invoice and the system automatically reads it, identifies the vendor, finds the right account number, and saves all the data. Now also automatically attempts to link the invoice to its matching service record after every upload. PDFs are now saved to secure storage and a link is stored on each invoice record.
 - **Contract Processing** — Users upload a PDF contract and the system extracts key fields (vendor, dates, value, renewal terms, cancellation notice) and stores them in a searchable database. Extracts 9 product catalog fields per service line. PDFs are now saved to secure storage and a link is stored on each contract record.
-- **Vendor Match Resolution** — When the system can't confidently identify a vendor from a document, the user can confirm the correct vendor or add a new one directly from the UI. The system learns from each correction.
+- **Vendor Match Resolution** — When the system can't confidently identify a vendor from a document, the user can confirm the correct vendor or add a new one directly from the UI. Now also supports manually linking an invoice to a specific contract (`link_contract` action), which writes the contract link, service link, and vendor assignment in one step and optionally saves the invoice vendor name as an alias for future matching.
 - **Reconciliation** — Matches processed invoices against expected charges to flag discrepancies.
-- **Service Match** — After every invoice is processed, the system automatically scores and links the invoice to the best matching service record.
+- **Service Match** — After every invoice is processed, the system automatically scores and links the invoice to the best matching service record. The best-scoring service is now always saved on the invoice even when the confidence is low, so no invoice is left with a blank service link.
 - **PDF Storage** — Every contract and invoice PDF uploaded through the batch pipeline is now stored in a private Supabase Storage bucket, organised by client and document type. Each record holds a secure link to its source PDF.
-- **Inventory Upload — Upload Invoice button** (`process-inventory-upload`, `process-inventory-document`) — The "Upload Invoice" button on contract cards in the batch review screen is now fully wired end-to-end in production. When a user uploads an invoice for a specific contract, the system links the invoice directly to that contract, skips the org-wide vendor search and assigns the vendor from the contract instead, and validates that the invoice amount, vendor name, and billing period match the contract. Mismatches are flagged with a warning and placed in the Needs Review section rather than silently accepted.
+- **Inventory Upload — full batch pipeline** — `check-batch-complete`, `reconcile-inventory-batch`, and `merge-vendors` promoted to production this session. The full inventory batch pipeline is now live in production.
+- **Inventory Upload — Upload Invoice button** — The "Upload Invoice" button on contract cards in the batch review screen is fully wired end-to-end in production.
+- **Vendor name normalization** — Vendor matching now handles `&` vs `"and"` correctly (e.g. "S&P" matches "S and P"). Legal suffixes (LLC, Inc, Ltd, etc.) are stripped before comparison in both the JavaScript matching engine and the PostgreSQL `match_vendor` function. Applied to both environments.
 
 ## What's in staging (not yet in production)
 
-- **Inventory Upload — full batch pipeline** (`check-batch-complete`, `reconcile-inventory-batch`) — Batch completion detection and vendor-level flag reconciliation remain staging-only. Full end-to-end staging validation still pending before promoting these to production.
-- **Vendor Merge** — Merges a duplicate vendor into a canonical one, moving all related records and adding the duplicate name as an alias for future auto-matching. Edge function: `merge-vendors`.
-- **User roster and invoice seat allocation** (`org_users`, `invoice_allocations`) — New database tables added to staging. `org_users` stores the organisation's people directory (name, title, department, group, manager, start/term dates). `invoice_allocations` links invoices to specific users with seat counts and unit cost for cost allocation. No edge function or UI built yet.
-
-**Pending before full production deploy:** end-to-end staging validation of the complete inventory batch flow, then promote `check-batch-complete`, `reconcile-inventory-batch`, and `merge-vendors` to production.
+- **User roster and invoice seat allocation** (`org_users`, `invoice_allocations`) — Database tables added to staging and production. `org_users` stores the organisation's people directory. `invoice_allocations` links invoices to specific users with seat counts and unit cost. No edge function or UI built yet.
 
 ## What's in development
 
-- **Vendor list page bug** — The Vendors page in the inventory section has two known filter issues being investigated: (1) vendors auto-created during batch upload have no `source` tag and are excluded from the vendor list query; (2) the vendor list only shows vendors with Active contracts — vendors whose contracts are still in Draft don't appear at all. Debug logging added to confirm root cause before fixing.
+- **Vendor list page bug** — The Vendors page in the inventory section has two known filter issues: (1) auto-created vendors have no `source` tag and are excluded from the vendor list query; (2) the vendor list only shows vendors with Active contracts. Debug logging added. Fix pending — awaiting decision on correct scope.
 - Vendor match status badges and warning indicators in the invoice and contract views.
-- UI workflow for confirming or overriding a vendor match directly from the invoice detail page.
-- Product Catalog fields on services — database columns and extraction logic are complete. UI for viewing and editing these fields is partially built in the inventory contract detail page.
-- Service history tracking — snapshots of service changes recorded automatically. UI not yet built.
-- Service match review UI — users will need a way to confirm or override service links on pending-scored invoices.
-- PDF viewer — storage is in place but the "View Contract PDF" and "View Invoice PDF" buttons are still disabled pending a UI implementation.
+- UI for manually linking an invoice to a contract (the `link_contract` backend action is live; the UI trigger is not yet built).
+- Product Catalog fields — database and extraction complete, UI partially built in the inventory contract detail page.
+- Service history tracking — snapshots recorded automatically, UI not yet built.
+- PDF viewer — storage in place, View PDF buttons not yet wired to signed URLs.
 
 ## What's coming next
 
-- Fix vendor list page to show all vendors regardless of contract status and source tag.
-- Surface stored PDF links in the UI — wire the View PDF buttons in the contract and invoice detail pages to the stored signed URLs.
+- Fix vendor list page filters (source tag and contract status).
+- Build UI trigger for `link_contract` — allow users to manually link an invoice to a contract from the review screen.
+- Surface stored PDF links in the UI — wire the View PDF buttons to the stored signed URLs.
 - Build UI for `org_users` — upload/manage the user roster.
 - Build UI for `invoice_allocations` — assign invoice seats to users from the invoice detail page.
-- Support for contracts that span multiple documents (Order Form + Master Agreement + Terms). Currently the system only reads one PDF at a time.
-- Usage tracking per client — visibility into how many documents each client has processed and estimated costs.
-- Second client onboarding — the system is architected for multiple clients but has only been configured for one so far.
+- Support for contracts that span multiple documents.
+- Usage tracking per client.
+- Second client onboarding.
 
 ## Where your input would help
 
-- **Vendor list — source filter decision** — The vendor list currently only shows vendors tagged `source = 'inventory_upload'`. Auto-created vendors (created when no match is found during batch processing) are inserted without a source tag, so they're invisible in the list. Fix options: (a) add `source = 'inventory_upload'` to the auto-create insert in `process-inventory-document`, or (b) remove the source filter from the vendor list query and show all org vendors. Worth deciding which is the right scope for this page.
-- **Vendor list — contract status filter decision** — The vendor list only shows vendors with at least one Active contract. Vendors with Draft contracts are completely hidden. Fix: remove the `.eq('status', 'Active')` filter from the contracts query and show all contracts, or show vendors with any contract status but badge the status on the card.
-- **Upload Invoice flow — end-to-end test** — The full chain (Upload Invoice button → append mode → linked contract matching → Needs Review / Looks Good grouping) is deployed to production but has not been tested with a real PDF.
-- **Auto-create vendor quality** — Contracts with no existing vendor match (score < 0.50) now automatically create a new vendor record using the extracted vendor name. Worth monitoring whether the extracted names are clean enough to use as canonical vendor names.
-- **PDF storage signed URLs** — current signed URLs are generated with a 10-year expiry at upload time. Alternative: store only the storage path and generate short-lived signed URLs on demand in the frontend. Worth deciding before building the View PDF UI.
-- **Drop old column timing** — the old `created_record_id` column on `inventory_upload_items` is still present. Can be dropped once staging validation confirms the new typed FK columns are working correctly.
+- **Vendor list — source filter decision** — Auto-created vendors (score < 0.50, created automatically during batch upload) are inserted without a `source` tag and don't appear in the Vendors page. Fix options: (a) tag them `source = 'inventory_upload'` at creation, or (b) remove the source filter entirely and show all org vendors. Decision needed before fixing the page.
+- **Vendor list — contract status filter decision** — The vendor list only shows vendors with Active contracts. Vendors with Draft contracts are hidden. Should the page show all contracts, or show all with a status badge?
+- **`link_contract` UI** — The backend action for manually linking an invoice to a contract is deployed and tested. The UI trigger (a button on the Needs Review cards or invoice detail) still needs to be built. Worth deciding where it should live — on the contract card in the batch review screen, or on the invoice detail page, or both.
+- **`data_frequency` extraction quality** — The GPT prompt for extracting data frequency now maps to canonical values (Real-time, End of Day, Daily, Weekly, Monthly, Quarterly, Annual). Worth testing against a few real contracts to confirm extraction quality improved.
+- **Auto-create vendor quality** — Contracts with no existing vendor match automatically create a new vendor. Worth monitoring whether extracted names are clean enough to use as canonical names.
+- **Drop old column timing** — `inventory_upload_items.created_record_id` is still present. Can be dropped after staging validation.
 
 ## Recent changes
 
-- **User roster and invoice allocation tables** — Added two new database tables to staging: `org_users` (the organisation's people directory with fields for name, title, department, group, manager, and start/termination dates) and `invoice_allocations` (maps invoices to specific users with seat count and unit cost for cost allocation reporting). Migration recorded and history repaired so the CLI stays in sync.
-- **Vendor list bugs identified** — Investigated the Vendors page and found two filters that cause vendors to disappear: a `source = 'inventory_upload'` filter on the vendors query that excludes auto-created vendors, and a `status = 'Active'` filter on contracts that hides vendors whose contracts are still in Draft. Debug logging added to the page to confirm behaviour in the browser. Fix not yet applied — awaiting decision on correct scope.
-- **Upload Invoice flow wired end-to-end** — When a user clicks "Upload Invoice" on a contract card in the batch review screen, the invoice is now processed against that specific contract rather than running a general org-wide vendor search. The system assigns the vendor directly from the linked contract, then checks whether the invoice vendor name, amount (within 5%), and billing period align. If all checks pass the invoice is marked as matched; if any check fails, the item is placed in Needs Review with a warning listing which fields didn't match.
-- **Contract vendor auto-create** — When a contract is uploaded through the batch pipeline and no existing vendor in the org matches the extracted vendor name (score below 0.50), the system now automatically creates a new vendor record rather than leaving the contract with no vendor assigned.
-- **Database** — Added `linked_contract_id` column to `inventory_upload_items`. Added `needs_review` as a valid value for the `match_state` column. Both applied to staging and production.
-- **Frontend** — Contract detail page in the inventory review screen now shows multiple invoices with expand/collapse and an Add Invoice button.
+- **Invoice-to-contract manual linking** — New `link_contract` action added to `resolve-vendor-match`. Accepts an invoice ID and contract ID, verifies they belong to the same org, writes the contract link, service link, vendor assignment, and match scores to the invoice in one step. Optionally saves the invoice vendor name as an alias if it differs from the contract's vendor name. Tested end-to-end in staging. Deployed to production.
+- **`invoices.contract_id` column** — New column added to the invoices table linking an invoice directly to a contract. Populated by the `link_contract` action. Migration applied to both staging and production.
+- **Vendor name normalization improved** — `&` is now expanded to `"and"` before comparison so "S&P" matches "S and P". Applied to both the JavaScript matching engine (used in batch processing) and the PostgreSQL `match_vendor` function (used in single-invoice processing). Deployed to both environments.
+- **Service match always saves best candidate** — Even when the confidence score is too low to call a match, the best-scoring service is now written to the invoice. Previously, low-scoring invoices had no service link at all.
+- **`data_frequency` extraction rules improved** — The GPT extraction prompt now maps document language to canonical values with explicit rules, reducing inconsistent outputs like "EOD" vs "End of Day".
+- **All inventory batch functions promoted to production** — `check-batch-complete`, `reconcile-inventory-batch`, and `merge-vendors` are now live in production. The full inventory pipeline is available in both environments.
+- **`org_users` and `invoice_allocations` tables** — Added to both staging and production. Groundwork for cost allocation reporting.
