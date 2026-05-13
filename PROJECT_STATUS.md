@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-13*
+*Last updated: 2026-05-14*
 
 ## What's live in production
 
@@ -55,3 +55,5 @@
 - **`data_frequency` extraction rules improved** — The GPT extraction prompt now maps document language to canonical values with explicit rules, reducing inconsistent outputs like "EOD" vs "End of Day".
 - **All inventory batch functions promoted to production** — `check-batch-complete`, `reconcile-inventory-batch`, and `merge-vendors` are now live in production. The full inventory pipeline is available in both environments.
 - **`org_users` and `invoice_allocations` tables** — Added to both staging and production. Groundwork for cost allocation reporting.
+- **`INTERNAL_WORKER_SECRET` rotated** — The secret that authenticates internal calls between `process-inventory-upload`, `process-inventory-document`, and `check-batch-complete` was missing from production. A new secret was generated and set on both staging and production simultaneously so the worker dispatch chain functions correctly in both environments.
+- **Migration sync** — `invoices.contract_id` migration was missing from production and has been applied. Both environments are now fully in sync on all 64 migrations.
