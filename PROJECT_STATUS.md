@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-26*
+*Last updated: 2026-05-29*
 
 ## What's live in production
 
@@ -10,90 +10,99 @@
 - **Service Match** — After every invoice is processed, the system automatically scores and links the invoice to the best matching service record. The best-scoring service is now always saved on the invoice even when the confidence is low, so no invoice is left with a blank service link.
 - **PDF Storage** — Every contract and invoice PDF uploaded through the batch pipeline is now stored in a private Supabase Storage bucket, organised by client and document type. Each record holds a secure link to its source PDF.
 - **Inventory Upload — full batch pipeline** — `check-batch-complete`, `reconcile-inventory-batch`, and `merge-vendors` promoted to production. The full inventory batch pipeline is now live in production.
-- **Inventory Upload — Upload Invoice button** — The "Upload Invoice" button on contract cards in the batch review screen is fully wired end-to-end in production.
-- **Vendor name normalization** — Vendor matching now handles `&` vs `"and"` correctly (e.g. "S&P" matches "S and P"). Legal suffixes (LLC, Inc, Ltd, etc.) are stripped before comparison in both the JavaScript matching engine and the PostgreSQL `match_vendor` function. Applied to both environments.
+- **Inventory Upload — Upload Invoice button** — The "Upload Invoice" button on contract cards in the batch review screen is now fully wired in both "Needs Review" and "Looks Good" sections. Was previously disabled on "Looks Good" cards.
+- **Vendor name normalization** — Vendor matching now handles `&` vs `"and"` correctly. Legal suffixes (LLC, Inc, Ltd, etc.) are stripped before comparison. Applied to both environments.
+- **PDF viewer in contract and invoice detail** — "Review with PDF" now works in production. PDFs are downloaded via the Supabase client and displayed in a split-pane viewer. If the download fails, a fallback "Open in new tab" button appears.
+- **Contract and invoice PDFs migrated to production** — All 93 contracts and 77 invoices from staging have their PDFs copied to production storage with valid signed URLs.
 
 ## What's in staging (not yet in production)
 
-- **Contract pricing derivation improvements** — The system now extracts year-by-year contract values (Year 1, Year 2, Year 3) and computes the total contract value as a deterministic sum — never trusting the AI's arithmetic. Service annual value is always Year 1 only. Conservative service splitting also deployed: services are only separated when the contract clearly distinguishes them by pricing, billing terms, delivery method, or materially different purpose. Deployed to staging on `feat/inventory-period-allocations`. Validated on Moody's contracts. Not yet in production.
-- **Contract Extraction V2** — Core extraction pipeline (V2 prompt, deterministic derivation, vendor hints) deployed to both environments. Full branch merge to main still pending — eval data, scripts, and golden test cases not yet merged.
-- **User roster and invoice seat allocation** (`org_users`, `invoice_allocations`) — Database tables added to staging and production. No edge function or UI built yet.
+- **Contract pricing derivation improvements** — The system now extracts year-by-year contract values and computes the total as a deterministic sum. Service annual value is always Year 1 only. Conservative service splitting deployed. Validated on Moody's contracts. Not yet promoted to production.
+- **Contract Extraction V2** — Core extraction pipeline deployed to both environments. Full branch merge to main still pending — eval data, scripts, and golden test cases not yet merged.
+- **User roster and invoice seat allocation** (`org_users`, `invoice_allocations`) — Database tables added. No edge function or UI built yet.
 
 ## What's in development
 
-- **Missing External Document Contracts report** — Starting next session. A cross-contract view showing all contracts where one or more fields point to an external document (Exhibit A, Schedule, Order Form, MSA, etc.) that hasn't been uploaded yet. Backend detection already works; only the list view and filtering need to be built.
-- **Service split/merge UI** — Deferred. Spec is ready (two Supabase RPCs + dialogs). Waiting for Santiago to validate the 4 extraction cases (DTCC=2, S&P=1, Refinitiv BDC+LPC=2, Moody's=1) before deciding if manual split/merge is needed.
-- **Vendor list page bug** — Two known filter issues: (1) auto-created vendors have no `source` tag and are excluded from the vendor list query; (2) the vendor list only shows vendors with Active contracts. Fix pending — awaiting decision on correct scope.
-- UI for manually linking an invoice to a contract (the `link_contract` backend action is live; the UI trigger is not yet built).
+- **Missing External Document Contracts report** — A cross-contract view showing all contracts where one or more fields point to an external document that hasn't been uploaded yet. Backend detection already works; only the list view and filtering need to be built.
+- **Service split/merge UI** — Deferred. Spec is ready. Waiting for Santiago to validate the 4 extraction cases before deciding if manual split/merge is needed.
+- **Vendor list page bug** — Two known filter issues: (1) auto-created vendors have no `source` tag and are excluded; (2) the vendor list only shows vendors with Active contracts. Fix pending — awaiting decision on correct scope.
+- UI for manually linking an invoice to a contract (backend action is live; UI trigger not yet built).
 - Service history tracking — snapshots recorded automatically, UI not yet built.
-- PDF viewer — storage in place, View PDF buttons not yet wired to signed URLs.
+- **InventoryDocuments page** — File exists and route is wired. Content and full functionality not yet validated.
 
 ## What's coming next
 
-1. **Missing External Document Contracts report** — list view of all contracts with supplemental document flags. No backend changes needed; query + UI only.
+1. **Missing External Document Contracts report** — list view of all contracts with supplemental document flags.
 2. **CoStar monthly billing normalization** — extractor returns monthly fees; need a rule to derive annual value from monthly pricing.
 3. **Merge `feat-extraction-v2` to main** — housekeeping, no user-facing change.
 4. Fix vendor list page filters (source tag and contract status).
 5. Build UI trigger for `link_contract`.
-6. Surface stored PDF links — wire View PDF buttons to signed URLs.
-7. Build UI for `org_users` and `invoice_allocations`.
-8. Support for contracts that span multiple documents.
-9. Second client onboarding.
+6. Build UI for `org_users` and `invoice_allocations`.
+7. Support for contracts that span multiple documents.
+8. Second client onboarding.
 
 ## Where your input would help
 
-- **Santiago validation** — Re-upload DTCC, S&P, Refinitiv BDC+LPC, and Moody's via Inventory Upload and confirm: (a) DTCC shows 2 services, (b) S&P shows 1 service, (c) Refinitiv BDC+LPC shows 2 services, (d) Moody's shows 1 service. This gates whether the service split behavior is signed off or needs further tuning.
-- **Vendor list — source filter decision** — Auto-created vendors (score < 0.50) are inserted without a `source` tag and don't appear in the Vendors page. Fix options: (a) tag them `source = 'inventory_upload'` at creation, or (b) remove the source filter entirely. Decision needed before fixing the page.
-- **Vendor list — contract status filter decision** — The vendor list only shows vendors with Active contracts. Vendors with Draft contracts are hidden. Should the page show all contracts, or show all with a status badge?
-- **`link_contract` UI** — The backend action is deployed and tested. Worth deciding where the UI trigger should live — on the contract card in the batch review screen, on the invoice detail page, or both.
+- **Santiago validation** — Re-upload DTCC, S&P, Refinitiv BDC+LPC, and Moody's via Inventory Upload and confirm the service split counts are correct. This gates whether the service split behavior is signed off.
+- **Vendor list — source filter decision** — Auto-created vendors don't appear in the Vendors page. Fix options: (a) tag them at creation, or (b) remove the source filter. Decision needed.
+- **Vendor list — contract status filter decision** — Should the page show all contracts or only Active ones?
+- **`link_contract` UI** — Worth deciding where the UI trigger should live (batch review screen, invoice detail page, or both).
+- **InventoryDocuments page** — Confirm what this page should show and whether the current content is correct.
 
 ## Recent changes
+
+### UI fixes and production stabilization — May 28–29 session
+
+**PDF viewer now works in production:**
+- All 93 contract and 77 invoice PDFs from staging were copied to production storage.
+- Signed URLs (valid for 10 years) were generated and saved on each record.
+- The "Review with PDF" split-pane viewer was fixed: PDFs are now downloaded via the Supabase client (bypassing browser iframe restrictions), then displayed in a local blob URL. A "Open in new tab" button shows as fallback if the download fails.
+
+**Upload Invoice button fixed:**
+- In the batch upload results screen, the "Upload Invoice" button on "Looks Good" cards was visually disabled. Fixed by passing the required props — it now works the same as "Needs Review" cards.
+- In the contract detail page accessed directly from Inventory (not from a batch), the button now shows a clear error message instead of silently doing nothing.
+
+**Inventory page renamed:**
+- Sidebar label and page heading changed from "Vendors" to "Inventory".
+- Clicking a vendor now expands it inline instead of navigating to a separate page.
+- Clicking a contract navigates to the contract detail page.
+
+**Back navigation fixed:**
+- "Back to Upload Results" now correctly shows "Back to Inventory" when reaching a contract detail from the Inventory page directly.
+
+**Repo cleanup:**
+- All feature branches merged to main and deleted. Both backend and frontend repos are on a single clean `main` branch.
+- Staging and production DB schemas are fully in sync (both at migration `20260528000004`).
+- All edge functions deployed to both environments on the same day.
+
+---
 
 ### Contract pricing derivation + service split — May 26 session
 
 **Pricing derivation (ported from feat-extraction-v2):**
 
-- The system now asks the AI to extract contract-level yearly values (Year 1, Year 2, Year 3) alongside regular fields. These are stored in `raw_extraction.pricing_evidence.contract_year_values`.
-- A deterministic rule then computes `contract_value` as the sum of those yearly values — overriding the AI's arithmetic, which was shown to be wrong on a real Moody's contract (AI returned $170,441 instead of the correct $167,474).
+- The system now asks the AI to extract contract-level yearly values (Year 1, Year 2, Year 3) alongside regular fields.
+- A deterministic rule computes `contract_value` as the sum of those yearly values — overriding the AI's arithmetic.
 - `services.annual_value` always reflects Year 1 only, not a multi-year total.
-- Validated on two Moody's contracts:
-  - 3-year contract: Year 1 $55,771 + Year 2 $52,864 + Year 3 $58,838 → `contract_value` $167,474
-  - 2-year contract: Year 1 $52,704 + Year 2 $56,920 → `contract_value` $109,624 (matched explicit document total)
+- Validated on two Moody's contracts.
 
 **Conservative service splitting:**
 
-- Updated the AI prompt to avoid over-splitting. Services are now separated only when the contract clearly distinguishes them by pricing, users/seats, billing terms, dates, license scope, delivery method, or materially different product purpose.
-- Added a deterministic post-processing step: when the AI splits services that share the same pricing and billing terms, the code consolidates them back into one service automatically.
+- Services are now separated only when the contract clearly distinguishes them by pricing, users/seats, billing terms, dates, license scope, delivery method, or materially different product purpose.
+- Deterministic post-processing consolidates services that share the same pricing and billing terms.
 - Validated 4 cases: DTCC (2 services ✅), S&P (1 service ✅), Refinitiv BDC+LPC (2 services ✅), Moody's (1 service ✅). Pending sign-off from Santiago.
-
-**UI:**
-
-- Contract Detail now shows multiple services as stacked expandable cards when a contract has more than one service. Single-service contracts look identical to before.
-- Service split/merge (user-initiated) documented as technical debt — spec ready, deferred until extraction defaults are confirmed correct.
-
----
-
-### Inventory contract pricing validation — May 26 session (earlier)
-
-Validated the pricing model with Santiago's guidance:
-
-- **Contract Value** means total contract value when clearly stated, or the deterministic sum of clear contract-level yearly values.
-- **Service Annual Value** means the Year 1 recurring value for the service.
-- **CUSIP counts are not seats** — CUSIP-based licenses leave `licensed_seats` empty unless users/seats are explicitly stated.
 
 ---
 
 ### P0 extraction fixes deployed to both environments — May 25 session
 
-- **Batch contract uploads now use the V2 prompt** — Contracts uploaded through the batch pipeline were using an older, less accurate prompt. Fixed in both environments.
-- **JSON reliability fix** — The AI extraction call in the batch pipeline did not force JSON output mode. Fixed in both environments.
-- **`internal_owner` priority corrected** — Request body value now correctly takes priority over org-level default. Fixed in both environments.
+- Batch contract uploads now use the V2 prompt.
+- JSON reliability fix applied to batch pipeline.
+- `internal_owner` priority corrected.
 
 ---
 
-### Contract Extraction V2 — May 20 session (staging only, branch feat-extraction-v2)
-
-**Accuracy progression:**
+### Contract Extraction V2 — May 20 session (staging only)
 
 | Checkpoint | Contracts | Accuracy |
 |---|---|---|
@@ -103,15 +112,3 @@ Validated the pricing model with Santiago's guidance:
 | After concept-based scoring | 8 (smoke) | 78.7% |
 | After bug fixes + expanded eval framework | 10 (smoke) | **93.6%** |
 | New vendors — zero tuning | 16 contracts | **86.4%** |
-
-**New vendor baseline (no vendor-specific tuning):**
-
-| Vendor | Accuracy |
-|---|---|
-| AlphaSense | 100% |
-| TSX / Moodys / PitchBook | 90–93% |
-| DTCC | 87% |
-| CoStar | 75% |
-| Deutsche Börse | 46%* |
-
-*\*Master agreement only — no pricing or products to extract. Low score expected by design.*
