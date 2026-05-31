@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-29*
+*Last updated: 2026-05-31*
 
 ## What's live in production
 
@@ -32,14 +32,16 @@
 
 ## What's coming next
 
-1. **Missing External Document Contracts report** — list view of all contracts with supplemental document flags.
-2. **CoStar monthly billing normalization** — extractor returns monthly fees; need a rule to derive annual value from monthly pricing.
-3. **Merge `feat-extraction-v2` to main** — housekeeping, no user-facing change.
-4. Fix vendor list page filters (source tag and contract status).
-5. Build UI trigger for `link_contract`.
-6. Build UI for `org_users` and `invoice_allocations`.
-7. Support for contracts that span multiple documents.
-8. Second client onboarding.
+1. **N3: Supporting document flag + upload** — when a field requires a supplemental document, show a flag in the contract detail UI and allow the user to upload the doc to auto-fill the missing fields. Infrastructure already exists (`getSupplementalFields()` in InventoryUploadDetail).
+2. **N5: Reports section** — new page: "Contracts missing supporting docs", "Missing allocations", "Missing product catalog." May live in dashboard navigation.
+3. **Missing External Document Contracts report** — list view of all contracts with supplemental document flags.
+4. **CoStar monthly billing normalization** — extractor returns monthly fees; need a rule to derive annual value from monthly pricing.
+5. **Merge `feat-extraction-v2` to main** — housekeeping, no user-facing change.
+6. Fix vendor list page filters (source tag and contract status).
+7. Build UI trigger for `link_contract`.
+8. Build UI for `org_users` and `invoice_allocations`.
+9. Support for contracts that span multiple documents.
+10. Second client onboarding.
 
 ## Where your input would help
 
@@ -50,6 +52,33 @@
 - **InventoryDocuments page** — Confirm what this page should show and whether the current content is correct.
 
 ## Recent changes
+
+### Inventory allocation editing + UX polish — May 29–31 session
+
+**Santiago onboarding (dev setup):**
+- Created `CLAUDE.md` in the frontend repo (`~/Documents/s4sourceio`) so any Claude Code instance opened by Santiago gets full project context automatically — no manual prompt pasting needed.
+
+**Performance: removed skeleton flash on upload list reload:**
+- Upload list page no longer shows skeleton spinner on every refresh — only on first load. `orgId` is cached in a ref so the profile query is skipped on re-renders.
+
+**Performance: removed metric card flash on batch upload detail:**
+- Metric cards (Needs Attention / Needs Review / Approved) previously flashed with incorrect counts during progressive data loading. Fixed by adding a `detailsReady` state — cards show a skeleton until invoice and allocation data are loaded in the background. Contracts list appears first, metric counts appear after.
+
+**Allocation UI — full editing support:**
+- Service name is now editable inline (click the name, pencil icon appears on hover → edit in place, save on Enter or blur).
+- Annual value is now editable inline (click the value to edit).
+- Start date and end date are shown per allocation row and editable with a native date picker.
+- "Remove" now soft-deletes (sets `status = 'inactive'`, `end_date = today`) instead of hard-deleting.
+- Inactive allocations are shown collapsed under "Show inactive (N)" toggle, rendered at reduced opacity.
+- "+ Add service" inline form added to the Allocations tab — no modal required.
+- Active allocation percentage only counts rows with `status = 'active'` and no past end date.
+
+**Approved section header aligned to Needs Attention / Needs Review pattern:**
+- Approved section now uses a green chevron, uppercase green label, and a green count badge — matching the visual hierarchy of the other two sections.
+
+**Sidebar nav cleanup:**
+- Removed the "Processing" nav item from the inventory sidebar. Processing badge moved to the "Upload" item.
+- `/inventory/processing` route now redirects to `/inventory/upload`.
 
 ### UI fixes and production stabilization — May 28–29 session
 
