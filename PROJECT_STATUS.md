@@ -34,17 +34,15 @@
 
 ## What's coming next
 
-1. **Billing accounts — billing_start / billing_end dates** — Add per-row billing period dates to allocation rows (separate from the subscription start/end). Discussed with Santiago.
-2. **Inventory Upload order** — Reorder sections to Looks Good → Needs Review → Needs Attention (currently reversed). Santiago requested this.
-3. **Missing invoice badge on collapsed card** — Show a visible indicator on contract cards that have no invoice linked yet.
-4. **Contract terms missing → Needs Review** — If critical contract term fields are missing, route to Needs Review instead of only flagging incomplete product catalog fields.
-5. **N3: Supporting document flag + upload** — when a field requires a supplemental document, show a flag in the contract detail UI and allow the user to upload the doc to auto-fill the missing fields.
-6. **N5: Reports section** — new page: "Contracts missing supporting docs", "Missing allocations", "Missing product catalog."
-7. **Large batch test** — Upload ~50 Stone X contracts+invoices to stress-test the allocation flow.
-8. Build UI trigger for `link_contract`.
-9. Fix vendor list page filters (source tag and contract status).
-10. Merge `feat-extraction-v2` to main (housekeeping).
-11. Promote billing account + invoice-to-contract matching to production.
+1. **Monthly pricing normalization (P1)** — When a contract states prices in monthly terms ("$799/month"), the AI extracts the monthly price as `annual_value` instead of multiplying × 12. Fix: add a rule in the extraction prompt so `unit_cost = monthly price` and `annual_value = unit_cost × 12`. Confirmed broken on OPIS/CB Information contract in production. Review with Santiago before implementing.
+2. **Internal owner in Product Catalog** — Santiago requested this field be moved to Product Catalog section. To verify if already in UI or missing.
+3. **Service sum validation** — Sum of service annual values should not exceed contract total. Deferred — validate approach with Santiago first.
+4. **N3: Supporting document flag + upload** — when a field requires a supplemental document, show a flag in the contract detail UI and allow the user to upload the doc.
+5. **N5: Reports section** — new page: "Contracts missing supporting docs", "Missing allocations", "Missing product catalog."
+6. **Large batch test** — Upload ~50 Stone X contracts+invoices to stress-test the allocation flow.
+7. Build UI trigger for `link_contract`.
+8. Fix vendor list page filters (source tag and contract status).
+9. Merge `feat-extraction-v2` to main (housekeeping).
 
 ## Where your input would help
 
