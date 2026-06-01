@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01*
 
 ## What's live in production
 
@@ -17,6 +17,8 @@
 
 ## What's in staging (not yet in production)
 
+- **Invoice-to-contract matching for new vendors** — When a batch contains both a contract and an invoice for a vendor that doesn't exist yet, the system now automatically links them. The invoice gets connected to the Draft contract; when the user confirms the contract, the vendor is created and the invoice is updated automatically. Works for both batch uploads and single invoice uploads. Race conditions handled by the reconciliation step.
+- **Billing accounts on allocation rows** — Each service subscription row can now be linked to a billing account (the client's account number with the vendor). The `is_billing_account` flag on accounts distinguishes billing accounts from platform/access accounts. The allocation UI shows a dropdown with only billing accounts for the vendor.
 - **Contract pricing derivation improvements** — The system now extracts year-by-year contract values and computes the total as a deterministic sum. Service annual value is always Year 1 only. Conservative service splitting deployed. Validated on Moody's contracts. Not yet promoted to production.
 - **Contract Extraction V2** — Core extraction pipeline deployed to both environments. Full branch merge to main still pending — eval data, scripts, and golden test cases not yet merged.
 - **User roster and invoice seat allocation** (`org_users`, `invoice_allocations`) — Database tables added. No edge function or UI built yet.
@@ -32,16 +34,17 @@
 
 ## What's coming next
 
-1. **N3: Supporting document flag + upload** — when a field requires a supplemental document, show a flag in the contract detail UI and allow the user to upload the doc to auto-fill the missing fields. Infrastructure already exists (`getSupplementalFields()` in InventoryUploadDetail).
-2. **N5: Reports section** — new page: "Contracts missing supporting docs", "Missing allocations", "Missing product catalog." May live in dashboard navigation.
-3. **Missing External Document Contracts report** — list view of all contracts with supplemental document flags.
-4. **CoStar monthly billing normalization** — extractor returns monthly fees; need a rule to derive annual value from monthly pricing.
-5. **Merge `feat-extraction-v2` to main** — housekeeping, no user-facing change.
-6. Fix vendor list page filters (source tag and contract status).
-7. Build UI trigger for `link_contract`.
-8. Build UI for `org_users` and `invoice_allocations`.
-9. Support for contracts that span multiple documents.
-10. Second client onboarding.
+1. **Billing accounts — billing_start / billing_end dates** — Add per-row billing period dates to allocation rows (separate from the subscription start/end). Discussed with Santiago.
+2. **Inventory Upload order** — Reorder sections to Looks Good → Needs Review → Needs Attention (currently reversed). Santiago requested this.
+3. **Missing invoice badge on collapsed card** — Show a visible indicator on contract cards that have no invoice linked yet.
+4. **Contract terms missing → Needs Review** — If critical contract term fields are missing, route to Needs Review instead of only flagging incomplete product catalog fields.
+5. **N3: Supporting document flag + upload** — when a field requires a supplemental document, show a flag in the contract detail UI and allow the user to upload the doc to auto-fill the missing fields.
+6. **N5: Reports section** — new page: "Contracts missing supporting docs", "Missing allocations", "Missing product catalog."
+7. **Large batch test** — Upload ~50 Stone X contracts+invoices to stress-test the allocation flow.
+8. Build UI trigger for `link_contract`.
+9. Fix vendor list page filters (source tag and contract status).
+10. Merge `feat-extraction-v2` to main (housekeeping).
+11. Promote billing account + invoice-to-contract matching to production.
 
 ## Where your input would help
 
@@ -50,8 +53,27 @@
 - **Vendor list — contract status filter decision** — Should the page show all contracts or only Active ones?
 - **`link_contract` UI** — Worth deciding where the UI trigger should live (batch review screen, invoice detail page, or both).
 - **InventoryDocuments page** — Confirm what this page should show and whether the current content is correct.
+- **Stone X batch** — Santiago to share ~50 contracts+invoices for large-scale allocation testing.
 
 ## Recent changes
+
+### Invoice-to-contract matching + billing accounts — June 1 session
+
+**Invoice-to-contract matching for new vendors:**
+- When a contract and invoice for the same new vendor are uploaded together, the system now links them automatically — even when the vendor doesn't exist yet in the database.
+- The invoice is marked as "contract pending" and linked to the Draft contract. When the user clicks Confirm on the contract, the vendor is created and the invoice is updated in one step.
+- Works for both batch uploads (contract and invoice in the same batch) and mixed flows (contract in batch, invoice uploaded separately afterwards).
+- Race conditions where the invoice arrives before the contract are handled by the reconciliation step that runs after the batch completes.
+- Fixed a bug where contract items in a batch were incorrectly staying in "pending" state instead of "contract pending", causing them to show up under Needs Attention in the UI even when everything matched correctly.
+- Validated end-to-end twice: once with Dremio (batch), once with City Falcon (mixed flow).
+
+**Billing accounts (staging):**
+- Accounts can now be flagged as billing accounts (`is_billing_account`). This distinguishes accounts that appear on invoices from platform/access accounts.
+- The Accounts page now shows a Billing column with a toggle. All existing accounts default to billing = on.
+- Each allocation row in the contract detail now has a billing account dropdown, showing only the billing accounts for that vendor. Selecting one saves the link directly.
+- Validated: City Falcon test accounts created, selected in UI, confirmed saved in database.
+
+---
 
 ### Inventory allocation editing + UX polish — May 29–31 session
 
@@ -79,6 +101,8 @@
 **Sidebar nav cleanup:**
 - Removed the "Processing" nav item from the inventory sidebar. Processing badge moved to the "Upload" item.
 - `/inventory/processing` route now redirects to `/inventory/upload`.
+
+---
 
 ### UI fixes and production stabilization — May 28–29 session
 
