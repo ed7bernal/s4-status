@@ -1,143 +1,149 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-03*
+
+---
 
 ## What's live in production
 
-- **Invoice Processing** — Users upload a PDF invoice and the system automatically reads it, identifies the vendor, finds the right account number, and saves all the data. Now also automatically attempts to link the invoice to its matching service record after every upload. PDFs are now saved to secure storage and a link is stored on each invoice record.
-- **Contract Processing** — Users upload a PDF contract and the system extracts key fields (vendor, dates, value, renewal terms, cancellation notice) and stores them in a searchable database. Extracts 9 product catalog fields per service line. PDFs are now saved to secure storage and a link is stored on each contract record.
-- **Vendor Match Resolution** — When the system can't confidently identify a vendor from a document, the user can confirm the correct vendor or add a new one directly from the UI. Now also supports manually linking an invoice to a specific contract (`link_contract` action), which writes the contract link, service link, and vendor assignment in one step and optionally saves the invoice vendor name as an alias for future matching.
-- **Reconciliation** — Matches processed invoices against expected charges to flag discrepancies.
-- **Service Match** — After every invoice is processed, the system automatically scores and links the invoice to the best matching service record. The best-scoring service is now always saved on the invoice even when the confidence is low, so no invoice is left with a blank service link.
-- **PDF Storage** — Every contract and invoice PDF uploaded through the batch pipeline is now stored in a private Supabase Storage bucket, organised by client and document type. Each record holds a secure link to its source PDF.
-- **Inventory Upload — full batch pipeline** — Full inventory batch pipeline live in production. Invoice-to-contract matching for new vendors now works end-to-end: invoice links to Draft contract automatically, vendor is created on user confirmation, invoice backfilled in one step.
-- **Billing accounts** — Accounts can be flagged as billing accounts. Each allocation row in the contract detail shows a billing account dropdown. Accounts with no vendor assigned act as defaults across all vendors. Users can create a new billing account inline from the allocation row.
-- **Inventory table** — Simplified to 6 columns (Vendor, Service, Start Date, End Date, Status, Cost). Collapsed vendor rows show aggregated data instead of empty dashes.
-- **Contract detail improvements** — Action Date and Total Contract Value are now editable inline. Service name and annual value are editable in both the Contract tab (SERVICES section) and the Allocations tab. New services inherit vendor and currency from the contract.
-- **Allocation user management** — Users can be created directly from the allocation picker (name, last name, department) without leaving the contract detail page.
-- **Approved contract navigation** — Clicking an approved contract in the Upload Results screen now navigates to the correct contract detail page.
-- **Vendor name normalization** — Vendor matching now handles `&` vs `"and"` correctly. Legal suffixes (LLC, Inc, Ltd, etc.) are stripped before comparison. Applied to both environments.
-- **PDF viewer in contract and invoice detail** — "Review with PDF" now works in production. PDFs are downloaded via the Supabase client and displayed in a split-pane viewer. If the download fails, a fallback "Open in new tab" button appears.
+- **Invoice Processing** — PDF upload → OCR → LLM extraction → vendor match → account match → service match → saved to DB with PDF stored securely.
+- **Contract Processing** — PDF upload → OCR → LLM extraction → vendor match → services created → PDF stored.
+- **Vendor Match Resolution** — Confirm vendor, create new, or link invoice to contract manually.
+- **Reconciliation** — Matches processed invoices against expected charges.
+- **Service Match** — Every invoice auto-scored and linked to best matching service after processing.
+- **PDF Storage** — All PDFs in private Supabase Storage bucket, secure signed URLs on each record.
+- **Inventory Upload (batch pipeline)** — Full batch pipeline live. Contract+invoice same-batch matching works end-to-end. Two-phase dispatch: contracts processed first, invoices after, fixing race condition.
+- **Billing accounts** — Accounts flagged as billing accounts. Allocation rows show billing account dropdown. Inline account creation.
+- **Contract detail editing** — Action Date, Total Contract Value, service name, annual value all editable inline.
+- **Allocation user management** — Create users inline from allocation picker.
+- **Vendor name normalization** — Handles `&`/`and`, strips legal suffixes.
+- **PDF viewer** — Split-pane viewer in contract and invoice detail.
+
+---
 
 ## What's in staging (not yet in production)
 
-- **Contract pricing derivation improvements** — The system now extracts year-by-year contract values and computes the total as a deterministic sum. Service annual value is always Year 1 only. Conservative service splitting deployed. Validated on Moody's contracts. Not yet promoted to production.
-- **Contract Extraction V2** — Core extraction pipeline deployed to both environments. Full branch merge to main still pending — eval data, scripts, and golden test cases not yet merged.
-- **User roster and invoice seat allocation** (`org_users`, `invoice_allocations`) — Database tables added. No edge function or UI built yet.
+### Inventory Module — GAPs 1-4 implemented and validated
+
+- **GAP 1 — HR/Users CSV upload** — Edge Function `upload-hr-csv` + RPC `reconcile_hr_csv`. Upload a CSV from HR each month → upserts `org_users` with cost_center, building, job_category, investment_strategy. Deactivation guard: if CSV has < 50% of active users, blocks deactivation and returns warning.
+- **GAP 2 — Auto-advance billing period** — `close_billing_period()` now automatically creates and activates the next month's period when a period is closed.
+- **GAP 3 — FX/Currencies** — `exchange_rates` table + `user_cost_usd` column in `inventory_period_snapshots`. Exchange rates entered monthly in the Periods UI; applied at period close.
+- **GAP 4 — Bulk update subscriptions** — Multi-select users in the Allocations tab → change billing account or billing dates for N users at once via `bulk_update_subscriptions` RPC.
+- **GAP 5 — Snapshot enrichment** — `cost_center`, `building`, `entity` columns added to snapshots, populated from `org_users` at period close.
+- **Vendor backfill on contract approval** — When a contract is approved and a vendor is created, all unmatched invoices with the same vendor name are automatically linked to the new vendor.
+- **Invoice amount match fix** — Amount badge now compares invoice subtotal (pre-tax) vs service annual_value, instead of invoice total vs contract total value. Fixes false Amount ✗ for EU/GBP vendors with VAT and for multi-year contracts.
+- **Invoice detail shows subtotal + tax** — Subtotal and Tax fields now visible (and editable) alongside Total in the invoice review panel, with currency formatting.
+
+### E2E Test Dataset (HIG Testing org — staging)
+- Org: `eb63c19f-a8dd-4f28-8638-b8c522fe4e18`
+- 15 org_users loaded via HR CSV (real HIG employees from Senthio)
+- 15 contracts uploaded and validated against Senthio data
+- 21 invoices uploaded and matched
+- Data covers monthly, quarterly, and annual billing frequencies; USD, GBP, EUR currencies
+
+---
+
+## Inventory Module — Senthio Feature Parity
+
+### Goal
+Replicate Senthio (H.I.G. Capital's Access DB) in Source so HIG can stop using Access. PoC target: **end of June 2026** — Ricky (internal user) using it for real feedback.
+
+### Senthio reference
+Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queries + month-end close workflow)
+Senthio DB version analyzed: 2026-06-02 (latest)
+
+### Specs ready to implement
+`.claude/specs/` — each spec has problem, what/how to build, risks, validation, UI spec.
+
+| GAP | Spec | Status |
+|---|---|---|
+| GAP 1 | `gap1-hr-users-csv.md` | ✅ Implemented & validated |
+| GAP 2 | `gap2-auto-advance-period.md` | ✅ Implemented & validated |
+| GAP 3 | `gap3-fx-currencies.md` | ✅ Implemented & validated |
+| GAP 4 | `gap4-billing-account-bulk-update.md` | ✅ Implemented & validated |
+| GAP 5 | `gap5-snapshot-enrichment.md` | ✅ Implemented & validated |
+
+### Next to build
+1. **Vendor grouping** — when a new client uploads contracts + invoices with no vendors yet, the system should group them by extracted vendor name and present them as "Fitch Solutions — 1 contract + 1 invoice → Confirm?" instead of showing all invoices as "No vendor match". Prompt ready in PROJECT_STATUS context.
+2. **Snapshot viewer UI** — browse closed period snapshots with matched/missing status per service
+3. **Missing invoices view** — services with active subscriptions but no invoice in current period
+4. **Cost per user view** — allocation_pct × invoice.total per user/service/period
+5. **Bloomberg Terminal Reconciliation** — compare Bloomberg's inventory files vs Source. Review with Santi.
+
+### Questions for Santi
+1. ¿Confirmar que `billing_start_date`/`billing_end_date` en `service_subscriptions` son las fechas en que el usuario empezó/terminó de aparecer en la factura de esa cuenta? (GAP 4 — ya implementado como tal)
+
+---
 
 ## What's in development
 
-- **Monthly pricing normalization (P1)** — When a contract states prices in monthly terms (e.g. "$799/month"), the AI incorrectly uses the monthly price as the annual value instead of multiplying × 12. Confirmed broken on OPIS/CB Information contract in production. Review with Santiago before fixing.
-- **Missing External Document Contracts report** — A cross-contract view showing all contracts where one or more fields point to an external document that hasn't been uploaded yet. Backend detection already works; only the list view and filtering need to be built.
-- **Service split/merge UI** — Deferred. Spec is ready. Waiting for Santiago to validate the 4 extraction cases before deciding if manual split/merge is needed.
-- **Vendor list page bug** — Two known filter issues: (1) auto-created vendors have no `source` tag and are excluded; (2) the vendor list only shows vendors with Active contracts. Fix pending — awaiting decision on correct scope.
-- UI for manually linking an invoice to a contract (backend action is live; UI trigger not yet built).
-- Service history tracking — snapshots recorded automatically, UI not yet built.
-
-## What's coming next
-
-1. **Monthly pricing normalization (P1)** — Fix extraction prompt so `unit_cost = monthly price` and `annual_value = unit_cost × 12` when contract states monthly rates. Review with Santiago first.
-2. **Internal owner in Product Catalog** — Santiago requested this field appear in Product Catalog section. Verify if already present or needs adding.
-3. **Service sum validation** — Sum of service annual values should not exceed contract total. Deferred — validate approach with Santiago first.
-4. **N3: Supporting document flag + upload** — when a field requires a supplemental document, show a flag in the contract detail UI and allow the user to upload the doc.
-5. **N5: Reports section** — new page: "Contracts missing supporting docs", "Missing allocations", "Missing product catalog."
-6. **Large batch test** — Upload ~50 Stone X contracts+invoices to stress-test the allocation flow.
-7. Build UI trigger for `link_contract`.
-8. Fix vendor list page filters (source tag and contract status).
-9. Merge `feat-extraction-v2` to main (housekeeping).
-
-## Where your input would help
-
-- **Monthly pricing fix** — Review the OPIS/CB Information contract in production and confirm the expected behavior before we change the extraction logic.
-- **Santiago validation** — Re-upload DTCC, S&P, Refinitiv BDC+LPC, and Moody's via Inventory Upload and confirm the service split counts are correct. This gates whether the service split behavior is signed off.
-- **Service sum validation** — Confirm whether users should be blocked or just warned when service values exceed the contract total.
-- **Vendor list — source filter decision** — Auto-created vendors don't appear in the Vendors page. Fix options: (a) tag them at creation, or (b) remove the source filter. Decision needed.
-- **`link_contract` UI** — Worth deciding where the UI trigger should live (batch review screen, invoice detail page, or both).
-- **Stone X batch** — Santiago to share ~50 contracts+invoices for large-scale allocation testing.
-
-## Recent changes
-
-### Contract detail + allocation UX overhaul — June 1 session (part 2)
-
-**Contract detail editing:**
-- Action Date and Total Contract Value are now editable inline — users can correct values if extraction got them wrong.
-- SERVICES section in the Contract tab now supports inline editing of service name and annual value, matching the Allocations tab behavior.
-- New services created from the Allocations tab now inherit the vendor and currency from the contract automatically.
-
-**Billing accounts:**
-- Accounts with no vendor assigned (`DEFAULT-BILL`) now appear in the billing account dropdown for every contract — acts as a global default.
-- When an allocation row has no billing accounts available, a "+ Add" link appears inline. Clicking it opens a mini-form to create and assign a billing account in one step without leaving the page.
-- Add Account form now accepts accounts without a vendor ("All vendors") for creating global accounts.
-- Placeholder billing accounts added to all staging vendors with Active contracts for testing.
-
-**Allocation user management:**
-- "+ Create new user" option added at the bottom of the user picker dropdown. Shows a mini inline form with first name, last name, and department. Creates the user and adds them to the allocation in one step.
-
-**Inventory table:**
-- Table simplified to 6 columns: Vendor, Service, Start Date, End Date, Status, Cost.
-- Collapsed vendor rows now show: service name (or "N services" if multiple), "Active" status, date range, and total cost — no more empty dashes.
-
-**Navigation fix:**
-- Clicking an approved contract in the Upload Results screen now correctly navigates to the contract detail page instead of the old vendor page.
-
-**Known bug identified:**
-- Contracts with monthly pricing (e.g. OPIS: "$799/month") show the monthly price as the annual value instead of the yearly total. Fix scheduled for after Santiago review.
+- **Vendor grouping for new clients** — see above. Spec/prompt ready, implementation pending.
+- **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
+- **Missing External Document Contracts report** — Backend detection works, UI not built.
+- **Service split/merge UI** — Deferred. Waiting for Santiago validation.
+- **`link_contract` UI** — Backend action live, UI trigger not built.
 
 ---
 
-### Invoice-to-contract matching + billing accounts — June 1 session (part 1)
+## Coming next (after Vendor Grouping)
 
-**Invoice-to-contract matching for new vendors:**
-- When a contract and invoice for the same new vendor are uploaded together, the system now links them automatically — even when the vendor doesn't exist yet in the database.
-- The invoice is marked as "contract pending" and linked to the Draft contract. When the user clicks Confirm on the contract, the vendor is created and the invoice is updated in one step.
-- Works for both batch uploads (contract and invoice in the same batch) and mixed flows (contract in batch, invoice uploaded separately afterwards).
-- Race conditions where the invoice arrives before the contract are handled by the reconciliation step that runs after the batch completes.
-- Fixed a bug where contract items in a batch were incorrectly staying in "pending" state instead of "contract pending", causing them to show up under Needs Attention in the UI even when everything matched correctly.
-- Validated end-to-end twice: once with Dremio (batch), once with City Falcon (mixed flow).
-
-**Billing accounts:**
-- Accounts can now be flagged as billing accounts. This distinguishes accounts that appear on invoices from platform/access accounts.
-- The Accounts page now shows a Billing column with a toggle. All existing accounts default to billing = on.
-- Each allocation row in the contract detail now has a billing account dropdown, showing only the billing accounts for that vendor.
-- Validated: City Falcon test accounts created, selected in UI, confirmed saved in database.
+1. Snapshot viewer UI
+2. Missing invoices view (services without invoice in current period)
+3. Cost per user view
+4. Renewal alerts (contracts approaching cancel_lead_time_days)
+5. Bloomberg Terminal Reconciliation (review with Santi Wednesday)
+6. Monthly pricing fix — after Santiago review
+7. Merge feat-extraction-v2 to main
 
 ---
 
-### Inventory allocation editing + UX polish — May 29–31 session
+## Technical debt
 
-**Allocation UI — full editing support:**
-- Service name is now editable inline (click the name, pencil icon appears on hover → edit in place, save on Enter or blur).
-- Annual value is now editable inline (click the value to edit).
-- Start date and end date are shown per allocation row and editable with a native date picker — renamed to "Billing Start" / "Billing End".
-- "Remove" now soft-deletes (sets `status = 'inactive'`, `end_date = today`) instead of hard-deleting.
-- Inactive allocations are shown collapsed under "Show inactive (N)" toggle, rendered at reduced opacity.
-- "+ Add service" inline form added to the Allocations tab — no modal required.
-
----
-
-### Contract pricing derivation + service split — May 26 session
-
-**Pricing derivation (ported from feat-extraction-v2):**
-
-- The system now asks the AI to extract contract-level yearly values (Year 1, Year 2, Year 3) alongside regular fields.
-- A deterministic rule computes `contract_value` as the sum of those yearly values — overriding the AI's arithmetic.
-- `services.annual_value` always reflects Year 1 only, not a multi-year total.
-- Validated on two Moody's contracts.
-
-**Conservative service splitting:**
-
-- Services are now separated only when the contract clearly distinguishes them by pricing, users/seats, billing terms, dates, license scope, delivery method, or materially different product purpose.
-- Deterministic post-processing consolidates services that share the same pricing and billing terms.
-- Validated 4 cases: DTCC (2 services ✅), S&P (1 service ✅), Refinitiv BDC+LPC (2 services ✅), Moody's (1 service ✅). Pending sign-off from Santiago.
+- **Batch upload scalability** — In-process polling + sequential dispatch breaks at ~50 docs. See `.claude/memory/project_batch_scalability_debt.md`
+- **Service split/merge UI** — See `.claude/memory/project_service_split_merge_debt.md`
+- **Invoice variance/adjustments** — When invoice ≠ inventory expected amount, need adjustment records (Senthio: `Invoices_Adj`). Deferred post-MVP.
+- **Soft/Hard dollar classification** — Senthio tracks Hard$ vs Soft$ per user. Deferred.
+- **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
+- **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. For escalating multi-year contracts (e.g. Gartner: $64k/$66.6k/$69.3k), user must manually update Annual Value each year. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
 
 ---
 
-### Contract Extraction V2 — May 20 session (staging only)
+## Environments
 
-| Checkpoint | Contracts | Accuracy |
+| | Supabase ref | Frontend |
 |---|---|---|
-| Baseline (before this sprint) | 45 | 64.8% |
-| After golden corrections | 44 | 66.8% |
-| After vendor knowledge base | 8 (smoke) | 75.3% |
-| After concept-based scoring | 8 (smoke) | 78.7% |
-| After bug fixes + expanded eval framework | 10 (smoke) | **93.6%** |
-| New vendors — zero tuning | 16 contracts | **86.4%** |
+| Production | `fdcxcivjhobreuseacot` | https://s4source.io |
+| Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-03 session)
+
+**Senthio full analysis completed:**
+- Complete documentation of all 19 tables, 70+ queries, and month-end close workflow in `.claude/skills/senthio-reference.md`
+- Verified against latest Senthio DB (2026-06-02): schema unchanged, Anthropic added as new vendor
+- Feature parity analysis: 8 gaps identified, 5 specs written and reviewed by architecture + UX agents
+
+**Inventory module GAPs 1-5 implemented and validated:**
+- HR CSV upload with monthly reconciliation (deactivation guard, audit trail, ACID transaction)
+- Billing period auto-advance after close
+- FX/Currency exchange rates with USD normalization
+- Bulk update of billing accounts and dates for multiple users
+- Snapshot enrichment with cost_center and building from org_users
+
+**Vendor backfill fix:**
+- When a contract is approved, all invoices with matching vendor name are now automatically linked — no more manual SQL needed
+
+**E2E test dataset prepared:**
+- HIG Testing org created in staging with 15 real HIG users (from Senthio HR data)
+- 15 contracts + 21 invoices uploaded and cross-validated against Senthio
+- Contract data completed using Senthio as source of truth (bill_frequency, cancel_lead_time_days, renewal terms)
+
+**Amount match fixes:**
+- Invoice subtotal (pre-tax) now used instead of total for Amount ✓/✗ badge
+- Comparison against service.annual_value instead of contract total value
+- Subtotal and Tax now visible in invoice detail panel with currency formatting
+- Applied in both InventoryContractDetail and InventoryUploadDetail
+
+**Pending:**
+- Vendor grouping for new clients (prompt ready, needs implementation in new chat)
+- feat/gap1-hr-users branch has all frontend changes — needs merge to main
