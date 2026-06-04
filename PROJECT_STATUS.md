@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-03*
+*Last updated: 2026-06-04*
 
 ---
 
@@ -60,7 +60,7 @@ Senthio DB version analyzed: 2026-06-02 (latest)
 | GAP 2 | `gap2-auto-advance-period.md` | ✅ Implemented & validated |
 | GAP 3 | `gap3-fx-currencies.md` | ✅ Implemented & validated |
 | GAP 4 | `gap4-billing-account-bulk-update.md` | ✅ Implemented & validated |
-| GAP 5 | `gap5-snapshot-enrichment.md` | ✅ Implemented & validated |
+| GAP 5 | `gap5-snapshot-enrichment.md` | ✅ Implemented & validated (2026-06-04) |
 
 ### Next to build
 1. **Vendor grouping** — when a new client uploads contracts + invoices with no vendors yet, the system should group them by extracted vendor name and present them as "Fitch Solutions — 1 contract + 1 invoice → Confirm?" instead of showing all invoices as "No vendor match". Prompt ready in PROJECT_STATUS context.
