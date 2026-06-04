@@ -32,6 +32,7 @@
 - **Vendor backfill on contract approval** — When a contract is approved and a vendor is created, all unmatched invoices with the same vendor name are automatically linked to the new vendor.
 - **Invoice amount match fix** — Amount badge now compares invoice subtotal (pre-tax) vs service annual_value, instead of invoice total vs contract total value. Fixes false Amount ✗ for EU/GBP vendors with VAT and for multi-year contracts.
 - **Invoice detail shows subtotal + tax** — Subtotal and Tax fields now visible (and editable) alongside Total in the invoice review panel, with currency formatting.
+- **Supplemental documents on contracts** — New Documents tab in contract detail. Upload Terms & Conditions, MSA, Schedules, Exhibits, Addendums, and other supporting docs. Multiple files per tag allowed. Documents uploaded from the global Documents page also appear here. Full review (PDF viewer) and delete support.
 
 ### E2E Test Dataset (HIG Testing org — staging)
 - Org: `eb63c19f-a8dd-4f28-8638-b8c522fe4e18`
