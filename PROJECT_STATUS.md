@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-04*
+*Last updated: 2026-06-08*
 
 ---
 
@@ -12,29 +12,43 @@
 - **Service Match** — Every invoice auto-scored and linked to best matching service after processing.
 - **PDF Storage** — All PDFs in private Supabase Storage bucket, secure signed URLs on each record.
 - **Inventory Upload (batch pipeline)** — Full batch pipeline live. Contract+invoice same-batch matching works end-to-end.
-- **Billing accounts** — Accounts flagged as billing accounts. Allocation rows show billing account dropdown. Inline account creation. Fixed: only accounts belonging to the contract's vendor are shown (global accounts no longer appear as invalid options).
-- **Contract detail editing** — Action Date, Total Contract Value, Annual Value, service name all editable inline.
+- **Billing accounts** — Accounts flagged as billing accounts. Allocation rows show billing account dropdown. Inline account creation. Fixed: only accounts belonging to the contract's vendor are shown.
+- **Contract detail editing** — All contract fields editable inline. Vendor name edit is smart: updates the vendor entity when a vendor is confirmed, updates the raw text field when still unmatched.
 - **Allocation user management** — Multi-select modal: add multiple users in one batch with evenly redistributed allocations. "Select all" support. Bulk change billing account and billing dates.
 - **Vendor name normalization** — Handles `&`/`and`, strips legal suffixes.
 - **PDF viewer** — Split-pane viewer in contract and invoice detail.
-- **Invoice detail** — Subtotal and Tax visible and editable alongside Total, with currency formatting. Amount badge compares invoice subtotal (pre-tax) vs service annual_value.
-- **Supplemental documents on contracts** — Documents tab in contract detail. Upload Terms & Conditions, MSA, Schedules, Exhibits, Addendums. Multiple files per tag. Global Documents page documents also appear here.
-- **GAP 1 — HR/Users CSV upload** — Upload HR CSV monthly → upserts `org_users` with cost_center, building, job_category, investment_strategy. Deactivation guard prevents accidental mass deactivation.
+- **Invoice detail** — Subtotal and Tax visible and editable alongside Total, with currency formatting.
+- **Supplemental documents on contracts** — Documents tab in contract detail. Upload Terms & Conditions, MSA, Schedules, Exhibits, Addendums.
+- **GAP 1 — HR/Users CSV upload** — Upload HR CSV monthly → upserts `org_users` with cost_center, building, job_category, investment_strategy.
 - **GAP 2 — Auto-advance billing period** — Closing a period automatically creates and activates the next month.
-- **GAP 3 — FX/Currencies** — `exchange_rates` table + `user_cost_usd` in snapshots. Exchange rates entered monthly in Periods UI; applied at period close.
+- **GAP 3 — FX/Currencies** — `exchange_rates` table + `user_cost_usd` in snapshots. Exchange rates entered monthly in Periods UI.
 - **GAP 4 — Bulk subscription update** — Multi-select allocations → change billing account or billing dates for multiple users at once.
 - **GAP 5 — Snapshot enrichment** — `cost_center` and `building` from `org_users` populated into snapshots at period close.
+- **Dashboard redesign** — Full dashboard with KPI cards, renewals bar chart, Needs Attention panel, Auto-Renewals table, Top Vendors chart. All data scoped to org.
+- **Sidebar navigation** — Dashboard as primary nav item. Processing tools (Invoice Processing, Contracts, Bloomberg Recon.) in a TOOLS section, visible only when modules are enabled for the user.
+- **Reports section** — Renamed from Documents. Two tabs: External Documents Required + Renewal Calendar (all active contracts with action date, sorted by urgency).
+- **Full-width layout** — All inventory pages now use full available width. No more fixed max-width constraints.
 
 ---
 
 ## What's in staging (not yet in production)
 
+### CDR — Test client for CDNR demo prep
+- User: `edbernal@cdr.com` / password: `12345`
+- Org: CDR (`b986d4d7-ca78-4326-998e-56682352b0e2`)
+- Only inventory module — no TOOLS section shows
+- Created 2026-06-08 for testing the new dashboard and inventory flow
+
+### CDNR — First real client POC
+- New small client (~50–75 contracts), inventory starts from June 2026 (no historical data needed)
+- Demo meeting with Stephanie de Lucía planned for ~2026-06-10
+- Santiago, Edgar, Bernardo + Stephanie attending
+- Goal: introduce them to the system and collect real feedback
+
 ### E2E Demo Dataset (HIG Testing org — staging only)
 - Org: `eb63c19f-a8dd-4f28-8638-b8c522fe4e18`
-- Reset to clean state for Santi demo: 0 vendors, 0 allocations, 0 snapshots
 - 15 contracts (Draft, unmatched) + 24 invoices (pending) ready to approve from scratch
 - 15 org_users from Senthio HR data, cost_center and building populated
-- Invoices pre-linked to July 2026 billing period for post-approval close demo
 - HR CSV at `~/Downloads/hig-test-hr.csv`
 
 ---
@@ -46,7 +60,6 @@ Replicate Senthio (H.I.G. Capital's Access DB) in Source so HIG can stop using A
 
 ### Senthio reference
 Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queries + month-end close workflow)
-Senthio DB version analyzed: 2026-06-02 (latest)
 
 ### GAP status
 | GAP | Spec | Status |
@@ -62,10 +75,9 @@ Senthio DB version analyzed: 2026-06-02 (latest)
 2. **Missing invoices view** — services with active subscriptions but no invoice in current period
 3. **Cost per user view** — allocation_pct × invoice.total per user/service/period
 4. **Vendor grouping** — group unmatched vendors by name when a new client uploads their first batch. Prompt ready.
-5. **Bloomberg Terminal Reconciliation** — compare Bloomberg's inventory files vs Source.
-
-### Questions for Santi
-1. ¿Confirmar que `billing_start_date`/`billing_end_date` en `service_subscriptions` son las fechas en que el usuario empezó/terminó de aparecer en la factura de esa cuenta?
+5. **Bloomberg Terminal Upload (structured CSV import)** — separate upload type from core subscription PDFs. Bloomberg provides standardized CSVs (Dash 2, Dash 3 formats). Flow: HR file → Bloomberg CSV → create contract + allocations. UI: upload type dropdown.
+6. **Spend/Inventory report** — monthly spend view: vendor → contracts → services → users/departments, with invoice adjustments and forecast.
+7. **Bloomberg Terminal Reconciliation** — compare Bloomberg inventory files vs Source.
 
 ---
 
@@ -73,20 +85,22 @@ Senthio DB version analyzed: 2026-06-02 (latest)
 
 - **Vendor grouping for new clients** — Spec/prompt ready, implementation pending.
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
-- **Missing External Document Contracts report** — Backend detection works, UI not built.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
 - **`link_contract` UI** — Backend action live, UI trigger not built.
+- **Allocations service name/annual_value editing** — The inline editing pattern around line 1898 in `InventoryContractDetail.tsx` still uses the old custom pattern (onBlur saves, no save/cancel buttons). Should be standardized to `InlineEditableField` like `ServiceBreakdownRow` was this session.
 
 ---
 
-## Coming next
+## Coming next (priority order for CDNR demo)
 
 1. Snapshot viewer UI
 2. Missing invoices view (services without invoice in current period)
 3. Cost per user view
 4. Renewal alerts (contracts approaching cancel_lead_time_days)
-5. Bloomberg Terminal Reconciliation (review with Santi)
-6. Monthly pricing fix — after Santiago review
+5. Bloomberg Terminal Upload (CSV-based, after HR file already live)
+6. Spend/Inventory report with adjustments + forecast
+7. Bloomberg Terminal Reconciliation (review with Santi)
+8. Monthly pricing fix — after Santiago review
 
 ---
 
@@ -98,6 +112,7 @@ Senthio DB version analyzed: 2026-06-02 (latest)
 - **Soft/Hard dollar classification** — Senthio tracks Hard$ vs Soft$ per user. Deferred.
 - **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
 - **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. For escalating multi-year contracts, user must manually update Annual Value each year. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
+- **Allocations inline editing** — Custom onBlur pattern still in place for service name/annual_value in the allocations panel (`InventoryContractDetail.tsx` ~line 1898). Should use `InlineEditableField`.
 
 ---
 
@@ -110,28 +125,33 @@ Senthio DB version analyzed: 2026-06-02 (latest)
 
 ---
 
-## Recent changes (2026-06-04 session)
+## Recent changes (2026-06-08 session)
 
-**GAPs 1-5 + all inventory features deployed to production:**
-- 29 migrations applied to production (HR CSV, auto-advance, FX rates, bulk subscriptions, snapshot enrichment, annual value, supplemental docs)
-- 7 edge functions deployed: `upload-hr-csv` (new), `close-billing-period`, `resolve-vendor-match`, `process-contract`, `process-inventory-upload`, `process-inventory-document`, `reconcile-inventory-batch`
-- Frontend branch `feat/gap1-hr-users` merged to `main` and deployed via Lovable
-- Staging and production confirmed in full schema parity (372 columns, 51 RPCs — identical)
+**Dashboard redesign — deployed to production:**
+- Dashboard moved into the main inventory layout (sidebar now always visible)
+- 4 KPI cards: Total Annual Value, Active Vendors, Renewals This Month, Expiring (90 days)
+- Renewals bar chart showing next 12 months of contract renewals by annual value
+- Needs Attention panel: vendor matches pending, contracts missing end dates, contracts flagged for review
+- Auto-Renewals table: contracts with auto_renew=true, sorted by action date, color-coded urgency
+- Top Vendors horizontal bar chart: top 8 vendors by annual contract value, truncated labels with hover tooltip
 
-**Billing account dropdown fix (production):**
-- Dropdown now only shows accounts belonging to the contract's vendor
-- Global accounts (vendor_id IS NULL) no longer appear as options when a vendor exists — they fail the trigger anyway
-- "+ New account" button always visible alongside the dropdown, not only when list is empty
+**Sidebar navigation overhaul — deployed to production:**
+- Processing tools (Invoice Processing, Contracts, Bloomberg Recon.) moved from dashboard cards to a TOOLS sidebar section
+- TOOLS section only shows when modules are enabled for the user; cached in localStorage to prevent flicker
+- "Documents" nav item renamed to "Reports"
 
-**E2E demo dataset prepared for Santi meeting (staging):**
-- HIG Testing org reset to clean state: vendors, allocations, snapshots, billing periods, org_users all cleared
-- Contracts reset to Draft/unmatched, invoices reset to pending
-- 24 invoices pre-linked to July 2026 billing period for post-approval snapshot demo
-- `hig-test-hr.csv` at `~/Downloads/` ready to upload
+**Reports section — deployed to production:**
+- New tab layout: "External Documents Required" (existing) + "Renewal Calendar" (new)
+- Renewal Calendar shows all active contracts with action_date set, sorted ascending, action dates color-coded (red ≤14 days, amber ≤30 days)
 
-**Production validated end-to-end:**
-- Gain.pro contract + invoice uploaded and processed correctly in production
-- `annual_value` derived automatically from contract value ✅
-- Vendor name normalization (Gain.AI → Gain.pro) working ✅
-- Billing period close generated snapshots with FX conversion (GBP → USD) ✅
-- Auto-advance created July period after June close ✅
+**Layout — deployed to production:**
+- Removed fixed max-width from all inventory pages (Inventory, Upload, Users, ContractDetail, VendorDetail, Documents, Processing, UploadDetail)
+- InventoryPeriods kept at max-w-3xl (form page)
+
+**Contract detail fixes — deployed to production:**
+- Vendor name edit is now context-aware: updates `vendors.name` when vendor is confirmed (cascades to all linked contracts/invoices), updates `contracts.contract_vendor` text field when still unmatched
+- `ServiceBreakdownRow` standardized to use `InlineEditableField`: removes onBlur auto-save bug, adds explicit Save/Cancel buttons, async-safe, draft syncs with prop changes
+- `InventoryUsers` field typing fixed: `keyof OrgUserRow` throughout the editing chain (was `string`, causing TypeScript error)
+
+**Staging — CDR test client created:**
+- User: `edbernal@cdr.com` / `12345`, org CDR, inventory-only (no modules)
