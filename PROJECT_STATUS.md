@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-08*
+*Last updated: 2026-06-08 (afternoon session)*
 
 ---
 
@@ -26,7 +26,8 @@
 - **GAP 5 — Snapshot enrichment** — `cost_center` and `building` from `org_users` populated into snapshots at period close.
 - **Dashboard redesign** — Full dashboard with KPI cards, renewals bar chart, Needs Attention panel, Auto-Renewals table, Top Vendors chart. All data scoped to org.
 - **Sidebar navigation** — Dashboard as primary nav item. Processing tools (Invoice Processing, Contracts, Bloomberg Recon.) in a TOOLS section, visible only when modules are enabled for the user.
-- **Reports section** — Renamed from Documents. Two tabs: External Documents Required + Renewal Calendar (all active contracts with action date, sorted by urgency).
+- **Reports section** — Renamed from Documents. Now three tabs: External Documents Required, Renewal Calendar (search, urgency filters, sortable columns), and Period Snapshots (browse closed billing-period history by month, with search, status filters, and sortable columns).
+- **Supplemental document flags auto-clear** — When a user manually types in a contract value that was flagged as "needs supporting document," the system now automatically marks it resolved — no matter how the value got entered (manual edit, re-processing, etc.). Fixes a bug where contracts kept showing as "pending" in reports even after the missing info was added.
 - **Full-width layout** — All inventory pages now use full available width. No more fixed max-width constraints.
 
 ---
@@ -126,6 +127,21 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 ---
 
 ## Recent changes (2026-06-08 session)
+
+**Supplemental document flag fix — deployed to production:**
+- Fixed a bug where a contract kept showing "needs supporting document" in reports even after a user manually typed in the missing value directly on the contract page
+- Added a database-level safeguard so the "needs document" flag automatically clears whenever the missing value gets filled in, no matter which screen or method was used to enter it
+- Fixed the report's "resolved" check to read the actual saved status instead of relying on whether a document file was uploaded
+
+**Renewal Calendar — deployed to production:**
+- Added a search box to find a contract by vendor name
+- Added filter buttons: Due Soon (within 30 days), Upcoming (31-90 days), All
+- Made every column sortable (Vendor, Action Date, End Date, Annual Value) by clicking the column header
+
+**Period Snapshots — new report, deployed to production:**
+- Moved the monthly closed-period history out of the Billing Periods page and into Reports as its own tab, shown as a full searchable/sortable table instead of a popup
+- Users can pick any closed month from a dropdown, search for a specific person/vendor/service, filter by matched vs. missing-invoice status, and sort any column
+- The Billing Periods page now shows a simple link pointing over to this new report
 
 **Dashboard redesign — deployed to production:**
 - Dashboard moved into the main inventory layout (sidebar now always visible)
