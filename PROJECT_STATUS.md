@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-09 (evening session)*
+*Last updated: 2026-06-09 (security hardening + production deploy)*
 
 ---
 
@@ -25,15 +25,16 @@
 - **GAP 4 — Bulk subscription update** — Multi-select allocations → change billing account or billing dates for multiple users at once.
 - **GAP 5 — Snapshot enrichment** — `cost_center` and `building` from `org_users` populated into snapshots at period close.
 - **Dashboard redesign** — Full dashboard with KPI cards, renewals bar chart, Needs Attention panel, Auto-Renewals table, Top Vendors chart. All data scoped to org.
-- **Sidebar navigation** — Dashboard as primary nav item. Processing tools (Invoice Processing, Contracts, Bloomberg Recon.) in a TOOLS section, visible only when modules are enabled for the user.
-- **Reports section** — Three tabs: External Documents Required, Renewal Calendar (search, urgency filters, sortable columns), and Period Snapshots (browse closed billing-period history by month, with search, status filters, sortable columns, and new Allocation / Avg Monthly / User Cost / Cost USD columns).
-- **Supplemental document flags auto-clear** — When a user manually types in a contract value that was flagged as "needs supporting document," the system automatically marks it resolved.
-- **Full-width layout** — All inventory pages now use full available width.
-- **Invoice delete** — Users can delete an incorrectly assigned invoice from the contract detail page and re-upload it to the correct contract.
-- **Billing period snapshot cost fix** — Snapshot now uses Avg Monthly cost (unit_cost ?? annual_value/12) so user_cost is never null when annual_value is set.
-- **Rate-limit retry hardening** — Batch upload dispatch retries on both HTTP 429 and thrown Supabase rate-limit exceptions, with jitter to prevent thundering herd.
+- **Sidebar navigation** — Dashboard as primary nav item. Processing tools in a TOOLS section, visible only when modules are enabled.
+- **Reports section** — External Documents Required, Renewal Calendar, Period Snapshots with cost columns.
+- **Supplemental document flags auto-clear** — Typing in a contract value that was flagged as missing auto-marks it resolved.
+- **Full-width layout** — All inventory pages use full available width.
+- **Invoice delete** — Users can delete a wrongly-assigned invoice and re-upload it to the correct contract.
+- **Billing period snapshot cost fix** — Avg Monthly uses `unit_cost ?? annual_value/12` so user_cost is never null when annual_value is set.
+- **Rate-limit retry hardening** — Batch upload dispatch retries on 429s and thrown rate-limit exceptions with jitter.
 - **linked_contract_id fix** — Invoice items in a batch now correctly link to their matched contract after reconciliation.
-- **Batch-scoped contract matching** — Invoices in a batch now only match against contracts from the same batch. Previously, a vendor name match (e.g. "AlphaSights") could incorrectly link to a Draft contract from a completely different prior batch (e.g. "ProSights") due to a shared word in the vendor name. Both the real-time processing phase and the reconciliation phase are now fully batch-isolated.
+- **Batch-scoped contract matching** — Invoices only match contracts from the same batch. No cross-batch false positives.
+- **Security hardening (P1–P11)** — Internal fields stripped from API responses, legacy RLS policies removed, UUID validation added to Edge Functions, org_id indexes added, audit trail hardened, client_modules RLS fixed. See Recent Changes for full list.
 
 ---
 
@@ -79,15 +80,16 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 ### Next to build
 1. **Missing invoices view** — services with active subscriptions but no invoice in current period
 2. **Cost per user view** — allocation_pct × invoice.total per user/service/period
-3. **Vendor grouping** — group unmatched vendors by name when a new client uploads their first batch. Prompt ready.
-4. **Bloomberg Terminal Upload (structured CSV import)** — separate upload type from core subscription PDFs.
-5. **Spend/Inventory report** — monthly spend view: vendor → contracts → services → users/departments, with invoice adjustments and forecast.
-6. **Bloomberg Terminal Reconciliation** — compare Bloomberg inventory files vs Source.
+3. **Vendor grouping** — group unmatched vendors by name when a new client uploads their first batch
+4. **Bloomberg Terminal Upload (structured CSV import)** — separate upload type from core subscription PDFs
+5. **Spend/Inventory report** — monthly spend view: vendor → contracts → services → users/departments
+6. **Bloomberg Terminal Reconciliation** — compare Bloomberg inventory files vs Source
 
 ---
 
 ## What's in development
 
+- **Multi-org architecture** — Consultants need to belong to multiple orgs (e.g. HIG and CDNR) and switch active client without re-login. Design planned but not started. See prompt in memory for next chat.
 - **Vendor grouping for new clients** — Spec/prompt ready, implementation pending.
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
@@ -111,14 +113,15 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Technical debt
 
+- **Multi-org user model** — Current model is 1 user = 1 org. Consultants need N orgs. Full redesign needed: `user_org_memberships` table, RLS overhaul, `active_org_id` in request headers, all Edge Functions updated. See `.claude/memory/project_multiorg_debt.md`
 - **Batch upload scalability** — In-process polling + sequential dispatch breaks at ~50 docs. See `.claude/memory/project_batch_scalability_debt.md`
 - **Service split/merge UI** — See `.claude/memory/project_service_split_merge_debt.md`
 - **Invoice variance/adjustments** — When invoice ≠ inventory expected amount, need adjustment records (Senthio: `Invoices_Adj`). Deferred post-MVP.
 - **Soft/Hard dollar classification** — Senthio tracks Hard$ vs Soft$ per user. Deferred.
 - **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
-- **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. For escalating multi-year contracts, user must manually update Annual Value each year. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
-- **Allocations inline editing** — Custom onBlur pattern still in place for service name/annual_value in the allocations panel (`InventoryContractDetail.tsx` ~line 1898). Should use `InlineEditableField`.
-- **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849), several unused state vars. Not causing runtime issues but should be cleaned up.
+- **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
+- **Allocations inline editing** — Custom onBlur pattern still in place in `InventoryContractDetail.tsx` ~line 1898. Should use `InlineEditableField`.
+- **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849+), several unused state vars. Not causing runtime issues.
 
 ---
 
@@ -131,31 +134,23 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ---
 
-## Recent changes (2026-06-09 session)
+## Recent changes (2026-06-09 session — security hardening)
 
-**Batch upload reliability — deployed to production:**
-- Fixed a silent failure where the system would hit rate limits and stop dispatching documents without retrying. Now retries on both HTTP 429 responses and thrown rate-limit exceptions from Supabase, with random jitter so all workers don't retry at exactly the same time
-- Reduced concurrent worker slots from 5 to 3 to reduce pressure on rate limits
-- Fixed invoices in a batch not showing as linked to their matched contract after processing
+**Security hardening — deployed to production (P1–P11):**
 
-**Billing period snapshot costs — deployed to production:**
-- Fixed: user cost in a closed period snapshot was null whenever a contract had an annual value but no per-seat price set. Now uses annual value ÷ 12 as the monthly cost (matching what the contract detail page shows as "Avg Monthly")
-- Period Snapshots table now shows Allocation %, Avg Monthly, and User Cost columns in addition to Cost (USD)
-- Removed the Status column from the snapshot table (redundant)
-- Fixed money formatting — small amounts like €3.15 were displaying as €3 (rounded to integer)
+- **API response filtering (P1, P2)** — Internal fields like raw extraction data, confidence scores, PDF hashes, and processing logs are now stripped from API responses before reaching the frontend. These were never meant to be client-visible.
+- **Legacy RLS policies removed (P3)** — Dropped 8 old database access policies on invoices, accounts, and vendors that used the user's individual ID instead of the organization ID. These were safe today but would have exposed cross-org data in a multi-user setup.
+- **Input validation hardened (P5, P6)** — Two backend functions that accept IDs from internal callers now validate that those IDs are properly formatted UUIDs before using them in database queries.
+- **Dead error path removed (P7)** — Removed a code branch in vendor matching that could never be reached but would have returned an error message revealing org ownership information if it somehow was.
+- **Database indexes added (P8)** — Added missing indexes on the org_id column for two frequently-queried tables (vendors, inventory_uploads). Queries that filter by organization are now faster.
+- **Audit trail hardened (P9)** — The billing period close function now uses the session's verified user identity for the audit log instead of trusting a user ID passed in the request body. A direct API call can no longer forge who closed a period.
+- **User/org cross-check added (P10)** — Batch document processing now verifies that the user attributed to a document actually belongs to the organization being processed. Prevents mis-attribution by a misconfigured internal caller.
+- **Access policy standardized (P11)** — The client_modules table had an access policy that checked org membership via an indirect user_id join instead of the org_id column directly. Standardized to match all other tables.
 
-**PDF viewer fix — deployed to production:**
-- Fixed: contracts and invoices uploaded via batch showed "No PDF available" in the review panel. The viewer was looking for the file at a hardcoded path that only applies to individually-uploaded documents. Now reads the actual storage path from the signed URL stored on each record
+**Performance — deployed to production (P12):**
+- **Upload Results polling reduced ~92%** — The Upload Results page was re-fetching 8–10 database queries every 5 seconds while a batch was processing, regardless of whether anything had changed. Now polls every 10 seconds and skips the heavy queries entirely when item statuses haven't changed since the last check. Validated via DevTools: 113 requests for a 5-minute batch vs ~660 estimated before the fix.
 
-**Invoice management — deployed to production:**
-- Added a delete button (trash icon) to the invoice table in contract detail. Allows users to remove a wrongly-assigned invoice and re-upload it to the correct contract
-- Confirmed end-to-end: delete → re-upload → correct vendor match works
-
-**UI cleanup — deployed to production:**
-- Removed "Not a match" button from invoice match review modal (deferred — flow not yet validated)
-- Removed "Merge vendors" button from Upload Results page — it belongs in Inventory where duplicate vendors are visible in context
-
-**Batch-scoped contract matching — deployed to production:**
-- Fixed a cross-batch false positive: when uploading a new batch, invoices were being incorrectly linked to Draft contracts from previous batches due to vendor name similarity (e.g. "AlphaSights" matching "ProSights" because both contain "sights")
-- Contract fallback matching during document processing now only considers contracts from the same batch
-- Both processing and reconciliation phases are now fully batch-isolated
+**E2E validation — confirmed on staging:**
+- Batch upload → polling behavior correct (fingerprint skip working)
+- Confirm contract → single Edge Function call, no polling
+- Allocation → direct CRUD, no polling
