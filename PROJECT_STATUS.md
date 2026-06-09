@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-09 (security hardening + production deploy)*
+*Last updated: 2026-06-09 (multi-org support — staging + production deploy)*
 
 ---
 
@@ -34,7 +34,8 @@
 - **Rate-limit retry hardening** — Batch upload dispatch retries on 429s and thrown rate-limit exceptions with jitter.
 - **linked_contract_id fix** — Invoice items in a batch now correctly link to their matched contract after reconciliation.
 - **Batch-scoped contract matching** — Invoices only match contracts from the same batch. No cross-batch false positives.
-- **Security hardening (P1–P11)** — Internal fields stripped from API responses, legacy RLS policies removed, UUID validation added to Edge Functions, org_id indexes added, audit trail hardened, client_modules RLS fixed. See Recent Changes for full list.
+- **Security hardening (P1–P11)** — Internal fields stripped from API responses, legacy RLS policies removed, UUID validation added to Edge Functions, org_id indexes added, audit trail hardened, client_modules RLS fixed.
+- **Multi-org support** — A user can belong to multiple organizations and switch active client without re-login. Single-org users see no change. See Recent Changes for details.
 
 ---
 
@@ -42,9 +43,9 @@
 
 ### CDR — Test client for CDNR demo prep
 - User: `edbernal@cdr.com` / password: `12345`
-- Org: CDR (`b986d4d7-ca78-4326-998e-56682352b0e2`)
-- Only inventory module — no TOOLS section shows
-- Full E2E flow validated: batch upload → vendor confirm → HR CSV → allocations → billing period close → snapshot with correct costs
+- Org: CDR (`b986d4d7-ca78-4326-998e-56682352b0e2`) + HIG Testing (`eb63c19f`)
+- This user has 2 orgs and sees the client selection screen on login
+- Full E2E multi-org flow validated: select client → data isolation confirmed → switch client works
 
 ### CDNR — First real client POC
 - New small client (~50–75 contracts), inventory starts from June 2026 (no historical data needed)
@@ -89,7 +90,6 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## What's in development
 
-- **Multi-org architecture** — Consultants need to belong to multiple orgs (e.g. HIG and CDNR) and switch active client without re-login. Design planned but not started. See prompt in memory for next chat.
 - **Vendor grouping for new clients** — Spec/prompt ready, implementation pending.
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
@@ -113,7 +113,6 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Technical debt
 
-- **Multi-org user model** — Current model is 1 user = 1 org. Consultants need N orgs. Full redesign needed: `user_org_memberships` table, RLS overhaul, `active_org_id` in request headers, all Edge Functions updated. See `.claude/memory/project_multiorg_debt.md`
 - **Batch upload scalability** — In-process polling + sequential dispatch breaks at ~50 docs. See `.claude/memory/project_batch_scalability_debt.md`
 - **Service split/merge UI** — See `.claude/memory/project_service_split_merge_debt.md`
 - **Invoice variance/adjustments** — When invoice ≠ inventory expected amount, need adjustment records (Senthio: `Invoices_Adj`). Deferred post-MVP.
@@ -122,6 +121,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
 - **Allocations inline editing** — Custom onBlur pattern still in place in `InventoryContractDetail.tsx` ~line 1898. Should use `InlineEditableField`.
 - **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849+), several unused state vars. Not causing runtime issues.
+- **HIG Testing exchange rates** — Only June 2026 rates configured. Need EUR/GBP rates for July 2026+ before next close.
 
 ---
 
@@ -134,23 +134,14 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ---
 
-## Recent changes (2026-06-09 session — security hardening)
+## Recent changes (2026-06-09 session — multi-org support)
 
-**Security hardening — deployed to production (P1–P11):**
+**Multi-org support — deployed to staging and production:**
 
-- **API response filtering (P1, P2)** — Internal fields like raw extraction data, confidence scores, PDF hashes, and processing logs are now stripped from API responses before reaching the frontend. These were never meant to be client-visible.
-- **Legacy RLS policies removed (P3)** — Dropped 8 old database access policies on invoices, accounts, and vendors that used the user's individual ID instead of the organization ID. These were safe today but would have exposed cross-org data in a multi-user setup.
-- **Input validation hardened (P5, P6)** — Two backend functions that accept IDs from internal callers now validate that those IDs are properly formatted UUIDs before using them in database queries.
-- **Dead error path removed (P7)** — Removed a code branch in vendor matching that could never be reached but would have returned an error message revealing org ownership information if it somehow was.
-- **Database indexes added (P8)** — Added missing indexes on the org_id column for two frequently-queried tables (vendors, inventory_uploads). Queries that filter by organization are now faster.
-- **Audit trail hardened (P9)** — The billing period close function now uses the session's verified user identity for the audit log instead of trusting a user ID passed in the request body. A direct API call can no longer forge who closed a period.
-- **User/org cross-check added (P10)** — Batch document processing now verifies that the user attributed to a document actually belongs to the organization being processed. Prevents mis-attribution by a misconfigured internal caller.
-- **Access policy standardized (P11)** — The client_modules table had an access policy that checked org membership via an indirect user_id join instead of the org_id column directly. Standardized to match all other tables.
-
-**Performance — deployed to production (P12):**
-- **Upload Results polling reduced ~92%** — The Upload Results page was re-fetching 8–10 database queries every 5 seconds while a batch was processing, regardless of whether anything had changed. Now polls every 10 seconds and skips the heavy queries entirely when item statuses haven't changed since the last check. Validated via DevTools: 113 requests for a 5-minute batch vs ~660 estimated before the fix.
-
-**E2E validation — confirmed on staging:**
-- Batch upload → polling behavior correct (fingerprint skip working)
-- Confirm contract → single Edge Function call, no polling
-- Allocation → direct CRUD, no polling
+- **Client switching without re-login** — A user can now belong to multiple organizations (e.g. Edgar belongs to both CDR and HIG Testing in staging). On login, users with multiple orgs see a client selection screen. Users with a single org go directly to the dashboard — no change in their experience.
+- **Switch client button** — Appears in the sidebar only for multi-org users. Returns to the client selection screen instantly without logging out.
+- **Data isolation verified** — Switching clients correctly scopes all data (contracts, invoices, vendors, billing periods, snapshots) to the selected org. Deep DB validation confirmed zero cross-org contamination.
+- **Database** — New `user_org_memberships` table (user_id + org_id + role). Backfill ran automatically for all existing users. Index on user_id keeps RLS queries fast.
+- **RLS migration** — 48 access policies across 16 tables updated to check org membership via the new memberships table instead of the profiles table.
+- **Edge Functions** — 7 functions updated to read the active org from a request header (`X-Active-Org-Id`) and validate the user's membership before processing. Backward-compatible: single-org users without the header fall back to the old behavior.
+- **Frontend** — 22 files updated. All direct `profiles.org_id` fetches removed. Every Edge Function call now sends the active org header. New `SelectOrg` page and routing logic added.
