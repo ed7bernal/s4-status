@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-08 (afternoon session)*
+*Last updated: 2026-06-09 (evening session)*
 
 ---
 
@@ -16,7 +16,7 @@
 - **Contract detail editing** — All contract fields editable inline. Vendor name edit is smart: updates the vendor entity when a vendor is confirmed, updates the raw text field when still unmatched.
 - **Allocation user management** — Multi-select modal: add multiple users in one batch with evenly redistributed allocations. "Select all" support. Bulk change billing account and billing dates.
 - **Vendor name normalization** — Handles `&`/`and`, strips legal suffixes.
-- **PDF viewer** — Split-pane viewer in contract and invoice detail.
+- **PDF viewer** — Split-pane viewer in contract and invoice detail. Now correctly loads PDFs for both batch-uploaded and individually-uploaded files.
 - **Invoice detail** — Subtotal and Tax visible and editable alongside Total, with currency formatting.
 - **Supplemental documents on contracts** — Documents tab in contract detail. Upload Terms & Conditions, MSA, Schedules, Exhibits, Addendums.
 - **GAP 1 — HR/Users CSV upload** — Upload HR CSV monthly → upserts `org_users` with cost_center, building, job_category, investment_strategy.
@@ -26,9 +26,14 @@
 - **GAP 5 — Snapshot enrichment** — `cost_center` and `building` from `org_users` populated into snapshots at period close.
 - **Dashboard redesign** — Full dashboard with KPI cards, renewals bar chart, Needs Attention panel, Auto-Renewals table, Top Vendors chart. All data scoped to org.
 - **Sidebar navigation** — Dashboard as primary nav item. Processing tools (Invoice Processing, Contracts, Bloomberg Recon.) in a TOOLS section, visible only when modules are enabled for the user.
-- **Reports section** — Renamed from Documents. Now three tabs: External Documents Required, Renewal Calendar (search, urgency filters, sortable columns), and Period Snapshots (browse closed billing-period history by month, with search, status filters, and sortable columns).
-- **Supplemental document flags auto-clear** — When a user manually types in a contract value that was flagged as "needs supporting document," the system now automatically marks it resolved — no matter how the value got entered (manual edit, re-processing, etc.). Fixes a bug where contracts kept showing as "pending" in reports even after the missing info was added.
-- **Full-width layout** — All inventory pages now use full available width. No more fixed max-width constraints.
+- **Reports section** — Three tabs: External Documents Required, Renewal Calendar (search, urgency filters, sortable columns), and Period Snapshots (browse closed billing-period history by month, with search, status filters, sortable columns, and new Allocation / Avg Monthly / User Cost / Cost USD columns).
+- **Supplemental document flags auto-clear** — When a user manually types in a contract value that was flagged as "needs supporting document," the system automatically marks it resolved.
+- **Full-width layout** — All inventory pages now use full available width.
+- **Invoice delete** — Users can delete an incorrectly assigned invoice from the contract detail page and re-upload it to the correct contract.
+- **Billing period snapshot cost fix** — Snapshot now uses Avg Monthly cost (unit_cost ?? annual_value/12) so user_cost is never null when annual_value is set.
+- **Rate-limit retry hardening** — Batch upload dispatch retries on both HTTP 429 and thrown Supabase rate-limit exceptions, with jitter to prevent thundering herd.
+- **linked_contract_id fix** — Invoice items in a batch now correctly link to their matched contract after reconciliation.
+- **Batch-scoped contract matching** — Invoices in a batch now only match against contracts from the same batch. Previously, a vendor name match (e.g. "AlphaSights") could incorrectly link to a Draft contract from a completely different prior batch (e.g. "ProSights") due to a shared word in the vendor name. Both the real-time processing phase and the reconciliation phase are now fully batch-isolated.
 
 ---
 
@@ -38,7 +43,7 @@
 - User: `edbernal@cdr.com` / password: `12345`
 - Org: CDR (`b986d4d7-ca78-4326-998e-56682352b0e2`)
 - Only inventory module — no TOOLS section shows
-- Created 2026-06-08 for testing the new dashboard and inventory flow
+- Full E2E flow validated: batch upload → vendor confirm → HR CSV → allocations → billing period close → snapshot with correct costs
 
 ### CDNR — First real client POC
 - New small client (~50–75 contracts), inventory starts from June 2026 (no historical data needed)
@@ -72,13 +77,12 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 | GAP 5 | `gap5-snapshot-enrichment.md` | ✅ Production |
 
 ### Next to build
-1. **Snapshot viewer UI** — browse closed period snapshots with matched/missing status per service
-2. **Missing invoices view** — services with active subscriptions but no invoice in current period
-3. **Cost per user view** — allocation_pct × invoice.total per user/service/period
-4. **Vendor grouping** — group unmatched vendors by name when a new client uploads their first batch. Prompt ready.
-5. **Bloomberg Terminal Upload (structured CSV import)** — separate upload type from core subscription PDFs. Bloomberg provides standardized CSVs (Dash 2, Dash 3 formats). Flow: HR file → Bloomberg CSV → create contract + allocations. UI: upload type dropdown.
-6. **Spend/Inventory report** — monthly spend view: vendor → contracts → services → users/departments, with invoice adjustments and forecast.
-7. **Bloomberg Terminal Reconciliation** — compare Bloomberg inventory files vs Source.
+1. **Missing invoices view** — services with active subscriptions but no invoice in current period
+2. **Cost per user view** — allocation_pct × invoice.total per user/service/period
+3. **Vendor grouping** — group unmatched vendors by name when a new client uploads their first batch. Prompt ready.
+4. **Bloomberg Terminal Upload (structured CSV import)** — separate upload type from core subscription PDFs.
+5. **Spend/Inventory report** — monthly spend view: vendor → contracts → services → users/departments, with invoice adjustments and forecast.
+6. **Bloomberg Terminal Reconciliation** — compare Bloomberg inventory files vs Source.
 
 ---
 
@@ -88,20 +92,20 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
 - **`link_contract` UI** — Backend action live, UI trigger not built.
-- **Allocations service name/annual_value editing** — The inline editing pattern around line 1898 in `InventoryContractDetail.tsx` still uses the old custom pattern (onBlur saves, no save/cancel buttons). Should be standardized to `InlineEditableField` like `ServiceBreakdownRow` was this session.
+- **CBInsights/ProSights Dice coefficient false positive** — "sights" suffix causes ~0.53 score (above 0.30 threshold). Threshold fix deferred.
+- **Not a match button** — Hidden for now. Flow and requirements need validation before re-enabling.
 
 ---
 
 ## Coming next (priority order for CDNR demo)
 
-1. Snapshot viewer UI
-2. Missing invoices view (services without invoice in current period)
-3. Cost per user view
-4. Renewal alerts (contracts approaching cancel_lead_time_days)
-5. Bloomberg Terminal Upload (CSV-based, after HR file already live)
-6. Spend/Inventory report with adjustments + forecast
-7. Bloomberg Terminal Reconciliation (review with Santi)
-8. Monthly pricing fix — after Santiago review
+1. Missing invoices view (services without invoice in current period)
+2. Cost per user view
+3. Renewal alerts (contracts approaching cancel_lead_time_days)
+4. Bloomberg Terminal Upload (CSV-based, after HR file already live)
+5. Spend/Inventory report with adjustments + forecast
+6. Bloomberg Terminal Reconciliation (review with Santi)
+7. Monthly pricing fix — after Santiago review
 
 ---
 
@@ -114,6 +118,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
 - **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. For escalating multi-year contracts, user must manually update Annual Value each year. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
 - **Allocations inline editing** — Custom onBlur pattern still in place for service name/annual_value in the allocations panel (`InventoryContractDetail.tsx` ~line 1898). Should use `InlineEditableField`.
+- **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849), several unused state vars. Not causing runtime issues but should be cleaned up.
 
 ---
 
@@ -126,48 +131,31 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ---
 
-## Recent changes (2026-06-08 session)
+## Recent changes (2026-06-09 session)
 
-**Supplemental document flag fix — deployed to production:**
-- Fixed a bug where a contract kept showing "needs supporting document" in reports even after a user manually typed in the missing value directly on the contract page
-- Added a database-level safeguard so the "needs document" flag automatically clears whenever the missing value gets filled in, no matter which screen or method was used to enter it
-- Fixed the report's "resolved" check to read the actual saved status instead of relying on whether a document file was uploaded
+**Batch upload reliability — deployed to production:**
+- Fixed a silent failure where the system would hit rate limits and stop dispatching documents without retrying. Now retries on both HTTP 429 responses and thrown rate-limit exceptions from Supabase, with random jitter so all workers don't retry at exactly the same time
+- Reduced concurrent worker slots from 5 to 3 to reduce pressure on rate limits
+- Fixed invoices in a batch not showing as linked to their matched contract after processing
 
-**Renewal Calendar — deployed to production:**
-- Added a search box to find a contract by vendor name
-- Added filter buttons: Due Soon (within 30 days), Upcoming (31-90 days), All
-- Made every column sortable (Vendor, Action Date, End Date, Annual Value) by clicking the column header
+**Billing period snapshot costs — deployed to production:**
+- Fixed: user cost in a closed period snapshot was null whenever a contract had an annual value but no per-seat price set. Now uses annual value ÷ 12 as the monthly cost (matching what the contract detail page shows as "Avg Monthly")
+- Period Snapshots table now shows Allocation %, Avg Monthly, and User Cost columns in addition to Cost (USD)
+- Removed the Status column from the snapshot table (redundant)
+- Fixed money formatting — small amounts like €3.15 were displaying as €3 (rounded to integer)
 
-**Period Snapshots — new report, deployed to production:**
-- Moved the monthly closed-period history out of the Billing Periods page and into Reports as its own tab, shown as a full searchable/sortable table instead of a popup
-- Users can pick any closed month from a dropdown, search for a specific person/vendor/service, filter by matched vs. missing-invoice status, and sort any column
-- The Billing Periods page now shows a simple link pointing over to this new report
+**PDF viewer fix — deployed to production:**
+- Fixed: contracts and invoices uploaded via batch showed "No PDF available" in the review panel. The viewer was looking for the file at a hardcoded path that only applies to individually-uploaded documents. Now reads the actual storage path from the signed URL stored on each record
 
-**Dashboard redesign — deployed to production:**
-- Dashboard moved into the main inventory layout (sidebar now always visible)
-- 4 KPI cards: Total Annual Value, Active Vendors, Renewals This Month, Expiring (90 days)
-- Renewals bar chart showing next 12 months of contract renewals by annual value
-- Needs Attention panel: vendor matches pending, contracts missing end dates, contracts flagged for review
-- Auto-Renewals table: contracts with auto_renew=true, sorted by action date, color-coded urgency
-- Top Vendors horizontal bar chart: top 8 vendors by annual contract value, truncated labels with hover tooltip
+**Invoice management — deployed to production:**
+- Added a delete button (trash icon) to the invoice table in contract detail. Allows users to remove a wrongly-assigned invoice and re-upload it to the correct contract
+- Confirmed end-to-end: delete → re-upload → correct vendor match works
 
-**Sidebar navigation overhaul — deployed to production:**
-- Processing tools (Invoice Processing, Contracts, Bloomberg Recon.) moved from dashboard cards to a TOOLS sidebar section
-- TOOLS section only shows when modules are enabled for the user; cached in localStorage to prevent flicker
-- "Documents" nav item renamed to "Reports"
+**UI cleanup — deployed to production:**
+- Removed "Not a match" button from invoice match review modal (deferred — flow not yet validated)
+- Removed "Merge vendors" button from Upload Results page — it belongs in Inventory where duplicate vendors are visible in context
 
-**Reports section — deployed to production:**
-- New tab layout: "External Documents Required" (existing) + "Renewal Calendar" (new)
-- Renewal Calendar shows all active contracts with action_date set, sorted ascending, action dates color-coded (red ≤14 days, amber ≤30 days)
-
-**Layout — deployed to production:**
-- Removed fixed max-width from all inventory pages (Inventory, Upload, Users, ContractDetail, VendorDetail, Documents, Processing, UploadDetail)
-- InventoryPeriods kept at max-w-3xl (form page)
-
-**Contract detail fixes — deployed to production:**
-- Vendor name edit is now context-aware: updates `vendors.name` when vendor is confirmed (cascades to all linked contracts/invoices), updates `contracts.contract_vendor` text field when still unmatched
-- `ServiceBreakdownRow` standardized to use `InlineEditableField`: removes onBlur auto-save bug, adds explicit Save/Cancel buttons, async-safe, draft syncs with prop changes
-- `InventoryUsers` field typing fixed: `keyof OrgUserRow` throughout the editing chain (was `string`, causing TypeScript error)
-
-**Staging — CDR test client created:**
-- User: `edbernal@cdr.com` / `12345`, org CDR, inventory-only (no modules)
+**Batch-scoped contract matching — deployed to production:**
+- Fixed a cross-batch false positive: when uploading a new batch, invoices were being incorrectly linked to Draft contracts from previous batches due to vendor name similarity (e.g. "AlphaSights" matching "ProSights" because both contain "sights")
+- Contract fallback matching during document processing now only considers contracts from the same batch
+- Both processing and reconciliation phases are now fully batch-isolated
