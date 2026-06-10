@@ -112,12 +112,12 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Technical debt
 
-- **Batch upload scalability** — In-process polling + sequential dispatch breaks at ~50 docs. See `.claude/memory/project_batch_scalability_debt.md`
-- **Service split/merge UI** — See `.claude/memory/project_service_split_merge_debt.md`
+- **Batch upload scalability** — In-process polling + sequential dispatch breaks at ~50 docs. See `docs/tech-debt/batch-upload-scalability.md`
+- **Service split/merge UI** — See `docs/tech-debt/service-split-merge.md`
 - **Invoice variance/adjustments** — When invoice ≠ inventory expected amount, need adjustment records (Senthio: `Invoices_Adj`). Deferred post-MVP.
 - **Soft/Hard dollar classification** — Senthio tracks Hard$ vs Soft$ per user. Deferred.
 - **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
-- **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. Full fix requires `ServicesFP` equivalent. See `.claude/memory/project_service_pricing_schedule_debt.md`
+- **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. Full fix requires `ServicesFP` equivalent. See `docs/tech-debt/service-pricing-schedule.md`
 - **Allocations inline editing** — Custom onBlur pattern still in place in `InventoryContractDetail.tsx` ~line 1898. Should use `InlineEditableField`.
 - **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849+), several unused state vars. Not causing runtime issues.
 - **HIG Testing exchange rates** — Only June 2026 rates configured. Need EUR/GBP rates for July 2026+ before next close.
