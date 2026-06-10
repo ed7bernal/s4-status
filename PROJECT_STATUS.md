@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-10 (first product review session completed — 16 items logged, action plan with 6 phases)*
+*Last updated: 2026-06-10 (Phase 0 of action plan shipped to production — 4 quick wins from the product review)*
 
 ---
 
@@ -36,6 +36,10 @@
 - **Batch-scoped contract matching** — Invoices only match contracts from the same batch. No cross-batch false positives.
 - **Security hardening (P1–P11)** — Internal fields stripped from API responses, legacy RLS policies removed, UUID validation added to Edge Functions, org_id indexes added, audit trail hardened, client_modules RLS fixed.
 - **Multi-org support** — A user can belong to multiple organizations and switch active client without re-login. Single-org users see no change. See Recent Changes for details.
+- **Expense Type dropdown** — Product Catalog "Expense Type" field is now a fixed-option dropdown (Market Data, Research, Technology, Trade Execution) instead of free text.
+- **Upload Results cards collapsed by default** — On entering Upload Results, contract cards now show collapsed (name, service, dates, score) by default, reducing clutter for large batches.
+- **Inventory Active/Cancelled/All filter** — Main Inventory list now has a pill filter (Active · Cancelled · All) with counts; Cancelled contracts no longer clutter the default Active view but remain reachable.
+- **Contract Invoice tab fixed** — A contract's "Invoice" tab now shows only the invoice(s) actually linked to that contract, not every invoice from the same upload batch. Backfilled `linked_contract_id` for older batches on staging and production.
 
 ---
 
@@ -93,13 +97,14 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
 - **`link_contract` UI** — Backend action live, UI trigger not built.
-- **CBInsights/ProSights Dice coefficient false positive** — "sights" suffix causes ~0.53 score (above 0.30 threshold). Threshold fix deferred.
+- **CBInsights/ProSights Dice coefficient false positive** — "sights" suffix causes ~0.48 score (above 0.30 threshold), causing an invoice to link to the wrong contract. Tracked as `R-017` in `PRODUCT_REVIEW_BACKLOG.md`. Threshold fix and one-off data correction deferred.
 - **Not a match button** — Hidden for now. Flow and requirements need validation before re-enabling.
 
 ---
 
 ## Coming next (priority order for CDNR demo)
 
+0. **Phase 1 of `/app-review` action plan** — Upload Results review flow fixes (`R-004`, `R-005`, `R-008`, `R-014`, `R-015`), to be worked in its own session.
 1. Missing invoices view (services without invoice in current period)
 2. Cost per user view
 3. Renewal alerts (contracts approaching cancel_lead_time_days)
@@ -130,6 +135,19 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-10 session — Phase 0 of action plan shipped)
+
+- **Phase 0 (4 quick wins) completed and deployed to staging and production**, validated by Edgar at each step:
+  - **Expense Type dropdown** (`R-010`) — fixed-option dropdown instead of free text in Product Catalog.
+  - **Upload Results cards collapsed by default** (`R-016`) — less clutter when reviewing a batch.
+  - **Inventory Active/Cancelled/All filter** (`R-013`) — Cancelled contracts hidden from the default view but available via filter, plus a new "Cancelled contracts" view.
+  - **Contract Invoice tab fix** (`R-006`) — a contract's Invoice tab now shows only its own linked invoice(s), not the whole batch. Includes a one-time data backfill on staging and production.
+- **New issue found and logged during validation (`R-017`)** — while validating the Invoice tab fix on the CDR staging batch, found one invoice ("CB Insights") pointing to the wrong contract ("ProSights Labs"), caused by a pre-existing vendor-name matching bug (Dice coefficient false positive on shared substrings). Not caused by today's changes — logged for a future fix, data not corrected yet.
+- **New design principle**: future UI proposals must reuse existing components/patterns already in the app (e.g. the pill-button filter style) rather than introducing new designs.
+- Phase 1 of the action plan (Upload Results review flow) is queued for a separate session.
 
 ---
 
