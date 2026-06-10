@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-09 (multi-org support — staging + production deploy)*
+*Last updated: 2026-06-10 (multi-org gap fixes verified in production; new product review process)*
 
 ---
 
@@ -49,9 +49,8 @@
 
 ### CDNR — First real client POC
 - New small client (~50–75 contracts), inventory starts from June 2026 (no historical data needed)
-- Demo meeting with Stephanie de Lucía planned for ~2026-06-10
-- Santiago, Edgar, Bernardo + Stephanie attending
-- Goal: introduce them to the system and collect real feedback
+- Demo with Stephanie de Lucía completed 2026-06-10 (Santiago, Edgar, Bernardo attending)
+- Follow-up feedback now flows through `/app-review` sessions into `PRODUCT_REVIEW_BACKLOG.md`
 
 ### E2E Demo Dataset (HIG Testing org — staging only)
 - Org: `eb63c19f-a8dd-4f28-8638-b8c522fe4e18`
@@ -131,6 +130,15 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-10 session — multi-org cleanup, environment health check, new feedback process)
+
+- **Multi-org support fully verified** — Consultants who work with more than one client can switch clients and now have EVERY feature — including batch document uploads and the monthly HR file import — correctly scoped to whichever client is currently selected, not just their home client. Verified live in production with a real multi-client user.
+- **Staging vs. production health check** — Compared every database table, security rule, and backend function between the test environment and the live environment. Everything matches, with two small internal-only items noted for later cleanup (no user impact).
+- **CDNR demo completed** — Demo with Stephanie de Lucía took place today. Follow-up items will flow into the new review process below.
+- **New: structured product review process** — Added an `/app-review` session. Edgar walks through the app and gives feedback out loud; each item is logged as a clear, prioritized to-do in `PRODUCT_REVIEW_BACKLOG.md`, ready to be picked up and worked on safely one at a time.
 
 ---
 
