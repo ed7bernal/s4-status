@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-10 (multi-org gap fixes verified in production; new product review process)*
+*Last updated: 2026-06-10 (first product review session completed — 16 items logged, action plan with 6 phases)*
 
 ---
 
@@ -130,6 +130,14 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-10 session — first product review + action plan)
+
+- **First `/app-review` session completed** — Edgar walked through Inventory Users, Periods/Exchange Rates, Inventory Upload, and Contract detail (plus feedback from a manager call with Santiago) and logged 16 pieces of feedback (`R-001`–`R-016`) in `PRODUCT_REVIEW_BACKLOG.md` — covering things like deleting users, adding new currencies, reopening a closed billing period, fixing a bug where invoices show on the wrong contract after a batch upload, and adding a "Per User vs. Shared" pricing option for services.
+- **New: `/triage-backlog` command** — A follow-up session type to score backlog items by effort/impact/risk and group them into "quick win / big bet / fill-in" buckets.
+- **Action plan with 6 phases** — The 16 items were grouped into phases by shared screens/dependencies (not just priority), each phase to be worked in its own chat session with: an upfront plan Edgar approves, validation after each individual fix, and a code-quality review before deploying. Deploys happen at the end of each phase, staging first as always. Phase 0 (quick wins) is next.
 
 ---
 
