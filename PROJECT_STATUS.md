@@ -132,6 +132,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **Allocations inline editing** — Custom onBlur pattern still in place in `InventoryContractDetail.tsx` ~line 1898. Should use `InlineEditableField`.
 - **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849+), several unused state vars. Not causing runtime issues.
 - **HIG Testing exchange rates** — Only June 2026 rates configured. Need EUR/GBP rates for July 2026+ before next close.
+- **Admin invite-user-by-email flow** — Approved Gate 1 plan, deferred until onboarding volume justifies it. See `docs/tech-debt/admin-invite-user-flow.md`.
 
 ---
 
