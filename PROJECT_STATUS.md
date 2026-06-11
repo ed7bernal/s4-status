@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-10 (Phase 0 of action plan shipped to production — 4 quick wins from the product review)*
+*Last updated: 2026-06-11 (Phases 1 + 2 of action plan shipped to production and validated by Edgar)*
 
 ---
 
@@ -40,6 +40,12 @@
 - **Upload Results cards collapsed by default** — On entering Upload Results, contract cards now show collapsed (name, service, dates, score) by default, reducing clutter for large batches.
 - **Inventory Active/Cancelled/All filter** — Main Inventory list now has a pill filter (Active · Cancelled · All) with counts; Cancelled contracts no longer clutter the default Active view but remain reachable.
 - **Contract Invoice tab fixed** — A contract's "Invoice" tab now shows only the invoice(s) actually linked to that contract, not every invoice from the same upload batch. Backfilled `linked_contract_id` for older batches on staging and production.
+- **Upload Results unified processing view** (R-004) — During batch processing, all items show a consistent "Processing N documents" state; final per-item statuses (matched, no vendor match, etc.) only appear once the whole batch completes.
+- **Confirm with outstanding issues** (R-005) — "Needs Attention" items now have a Confirm action (previously only "Looks Good"/"Needs Review"). Confirming a "Needs Review"/"Needs Attention" item shows a warning dialog listing unresolved issues; the contract carries a "Needs Review"/"Needs Attention" badge in the Inventory vendor list afterward.
+- **Delete action on Upload Results** (R-008) — Items not yet approved (status != Active, no review_status, no allocations/snapshots) can be deleted from the review page via `delete_inventory_review_item` RPC, removing the contract and its linked invoice(s). Hidden once a contract is Approved.
+- **Review-pending indicator on Recent Uploads** (R-014/R-015) — The Recent Uploads table has separate "Status" and "Review" columns; "Review" shows "Review pending (N)" or "Fully reviewed" based on how many contract items in the batch are still not Active.
+- **Inventory Users — explicit Active/Inactive action** (R-001) — Row-level action plus bulk multi-select to set users active/inactive (replaces the old inline toggle).
+- **Exchange Rates — dynamic per-org currency list** (R-002) — Periods > Exchange Rates now supports adding new currencies (code + initial rate) and disabling/hiding currencies an org doesn't use, plus FX carry-forward on period close.
 
 ---
 
@@ -135,6 +141,16 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-11 session — Phases 1 + 2 shipped to production)
+
+- **Phase 1 (Upload Results review flow) completed**: R-004, R-005, R-008, R-014, R-015 — all implemented, code-reviewed, deployed to staging then production, and validated by Edgar on `s4source.io`.
+- **Phase 2 (Periods & Users) completed**: R-001, R-002 — implemented, validated on staging, deployed to production alongside Phase 1 (combined release since `supabase db push` applies all pending migrations together). R-003 (reopen billing period) deferred pending manager review.
+- **Combined production deploy**: 6 migrations (`20260610000009/10/11/12/13`, `20260611000001`), `resolve-vendor-match` redeployed (verify_jwt reset to off), frontend `main` through commit `5e3e51d`.
+- **R-008 security fix**: review-agent found and fixed a cross-org delete vector in `delete_inventory_review_item` (caller-supplied `p_org_id` wasn't checked against `auth.uid()`'s org membership) before this went to production.
+- Phase 3 (R-011, pricing model Per User/Shared) is next — Gate 1 plan already approved, implementation deferred until this session closed out.
 
 ---
 
