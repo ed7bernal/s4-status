@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-11 (CDR user accounts created in production; admin invite-by-email flow planned and deferred)*
+*Last updated: 2026-06-11 (Phase 3 — Pricing model Per User/Shared shipped to production)*
 
 ---
 
@@ -110,7 +110,6 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Coming next (priority order for CDNR demo)
 
-0. **Phase 3 of `/app-review` action plan** — Pricing model option (Per User vs Shared) for contract services, requested by Santiago. Planning done, to be worked in its own session.
 1. Missing invoices view (services without invoice in current period)
 2. Cost per user view
 3. Renewal alerts (contracts approaching cancel_lead_time_days)
@@ -142,6 +141,17 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-11 session — Phase 3 (R-011) Pricing Model shipped to production)
+
+- **Pricing model field (Per User vs Shared)** for contract services is now live: a "Pricing Model" dropdown in Product Catalog (with a short explanation), and an editable "Shared"/"Per User" badge on each service in the Allocations tab.
+- **Calculation change**: closing a billing period now computes each user's cost based on the service's pricing model — `Shared` (default, unchanged behavior) splits the monthly cost by allocation %; `Per User` charges each allocated user the full monthly cost regardless of allocation %.
+- No retroactive recalculation — only periods closed from now on use the new logic; previously-closed snapshots are untouched.
+- Code review and full review-agent checklist (security, data architecture, code quality, performance) passed clean before deploy.
+- Validated end-to-end on staging and again on production (closed a real period, confirmed both Shared-split and Per User-full-cost rows in the snapshot, including FX conversion).
+- Phase 3 of the `/app-review` action plan is now closed (R-011 marked Done).
 
 ---
 
