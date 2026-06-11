@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-11 (Phase 3 — Pricing model Per User/Shared shipped to production)*
+*Last updated: 2026-06-11 (Needs Information report rework shipped to production)*
 
 ---
 
@@ -26,7 +26,7 @@
 - **GAP 5 — Snapshot enrichment** — `cost_center` and `building` from `org_users` populated into snapshots at period close.
 - **Dashboard redesign** — Full dashboard with KPI cards, renewals bar chart, Needs Attention panel, Auto-Renewals table, Top Vendors chart. All data scoped to org.
 - **Sidebar navigation** — Dashboard as primary nav item. Processing tools in a TOOLS section, visible only when modules are enabled.
-- **Reports section** — External Documents Required, Renewal Calendar, Period Snapshots with cost columns.
+- **Reports section** — Needs Information (formerly "External Documents Required"), Renewal Calendar, Period Snapshots with cost columns.
 - **Supplemental document flags auto-clear** — Typing in a contract value that was flagged as missing auto-marks it resolved.
 - **Full-width layout** — All inventory pages use full available width.
 - **Invoice delete** — Users can delete a wrongly-assigned invoice and re-upload it to the correct contract.
@@ -46,6 +46,7 @@
 - **Review-pending indicator on Recent Uploads** (R-014/R-015) — The Recent Uploads table has separate "Status" and "Review" columns; "Review" shows "Review pending (N)" or "Fully reviewed" based on how many contract items in the batch are still not Active.
 - **Inventory Users — explicit Active/Inactive action** (R-001) — Row-level action plus bulk multi-select to set users active/inactive (replaces the old inline toggle).
 - **Exchange Rates — dynamic per-org currency list** (R-002) — Periods > Exchange Rates now supports adding new currencies (code + initial rate) and disabling/hiding currencies an org doesn't use, plus FX carry-forward on period close.
+- **"Needs Information" report rework** — Renamed from "External Documents Required" and broadened to also surface approved contracts flagged `needs_review`/`needs_attention` (not just ones missing supplemental docs). New pill filters: Not Approved · Needs Review · Needs Attention · Resolved · All. Added a "Mark as resolved" action on report cards that clears `review_status`; contracts with nothing left to track drop off the report entirely.
 
 ---
 
@@ -141,6 +142,15 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-11 session — Needs Information report rework shipped to production)
+
+- **Reports tab "External Documents Required" renamed to "Needs Information"** and broadened: it now shows any contract that's missing something — either a required supplemental document, or an approved contract still flagged "Needs Review" / "Needs Attention". Contracts that are fully complete no longer appear in this report at all.
+- **New filter pills**: Not Approved · Needs Review · Needs Attention · Resolved · All, each with a live count.
+- **New "Mark as resolved" button** directly on each report card — lets the user clear a "Needs Review"/"Needs Attention" flag once they've fixed the issue, without confusing buttons on the contract detail page itself. A short note explains the contract will drop off the report once nothing is left to track.
+- Validated on staging (CDR account) and confirmed live in production.
 
 ---
 
