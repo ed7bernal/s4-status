@@ -110,7 +110,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Coming next (priority order for CDNR demo)
 
-0. **Phase 1 of `/app-review` action plan** — Upload Results review flow fixes (`R-004`, `R-005`, `R-008`, `R-014`, `R-015`), to be worked in its own session.
+0. **Phase 3 of `/app-review` action plan** — Pricing model option (Per User vs Shared) for contract services, requested by Santiago. Planning done, to be worked in its own session.
 1. Missing invoices view (services without invoice in current period)
 2. Cost per user view
 3. Renewal alerts (contracts approaching cancel_lead_time_days)
@@ -146,11 +146,12 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Recent changes (2026-06-11 session — Phases 1 + 2 shipped to production)
 
-- **Phase 1 (Upload Results review flow) completed**: R-004, R-005, R-008, R-014, R-015 — all implemented, code-reviewed, deployed to staging then production, and validated by Edgar on `s4source.io`.
-- **Phase 2 (Periods & Users) completed**: R-001, R-002 — implemented, validated on staging, deployed to production alongside Phase 1 (combined release since `supabase db push` applies all pending migrations together). R-003 (reopen billing period) deferred pending manager review.
-- **Combined production deploy**: 6 migrations (`20260610000009/10/11/12/13`, `20260611000001`), `resolve-vendor-match` redeployed (verify_jwt reset to off), frontend `main` through commit `5e3e51d`.
-- **R-008 security fix**: review-agent found and fixed a cross-org delete vector in `delete_inventory_review_item` (caller-supplied `p_org_id` wasn't checked against `auth.uid()`'s org membership) before this went to production.
-- Phase 3 (R-011, pricing model Per User/Shared) is next — Gate 1 plan already approved, implementation deferred until this session closed out.
+- **Upload Results review flow improvements** are now live for everyone: a clearer "still processing" view while a batch is running, the ability to confirm an item even when it has outstanding issues (with a warning so nothing gets missed), the ability to delete an uploaded item that hasn't been approved yet, and clear indicators on the uploads list showing which batches still need review.
+- **User management improvements**: org admins can now mark users active/inactive individually or in bulk from the Users page.
+- **Currency settings improvements**: orgs can now add new currencies and hide ones they don't use in Periods > Exchange Rates.
+- Before going live, a security review caught and fixed an issue where the new "delete uploaded item" feature could have been pointed at another organization's data — fixed before production deploy.
+- Edgar reviewed and validated all of the above directly on the live site.
+- Next up: a pricing model option (Per User vs Shared) for contract services, requested by Santiago — planning is done, implementation starts in a future session.
 
 ---
 
