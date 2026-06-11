@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-11 (Phases 1 + 2 of action plan shipped to production and validated by Edgar)*
+*Last updated: 2026-06-11 (CDR user accounts created in production; admin invite-by-email flow planned and deferred)*
 
 ---
 
@@ -142,6 +142,14 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-11 session — CDR user accounts + invite-by-email plan)
+
+- **New CDR users added to production**: Bernardo Santiago and Trey Guevara now have accounts and can log in to https://s4source.io. Stephanie de Lucía's password was also reset. All three were sent the same temporary password by email and can change it themselves from Profile Settings.
+- **Looked at how new users are added today** (currently a manual, by-hand process) and put together a plan for a proper "invite by email" flow — admin sends an invite, the new user gets an email, clicks a link, sets their own password, and is in. Decided to **defer building this for now** since it's just a handful of internal CDR users during this proof-of-concept phase. The full plan is written up and ready to pick up later (`docs/tech-debt/admin-invite-user-flow.md`).
+- No code changes shipped to staging or production this session — only account setup (production database) and documentation.
 
 ---
 
