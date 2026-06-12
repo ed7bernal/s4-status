@@ -60,6 +60,7 @@
 - Org: CDR (`b986d4d7-ca78-4326-998e-56682352b0e2`) + HIG Testing (`eb63c19f`)
 - This user has 2 orgs and sees the client selection screen on login
 - Full E2E multi-org flow validated: select client → data isolation confirmed → switch client works
+- Bloomberg Reconciliation module enabled for this user on both orgs (CDR + HIG Testing) — see Recent changes
 
 ### CDNR — First real client POC
 - New small client (~50–75 contracts), inventory starts from June 2026 (no historical data needed)
@@ -145,6 +146,16 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-12 session — Bloomberg Reconciliation activation + nav fixes, staging)
+
+- **Reconciliation module activated for CDR + HIG Testing (staging only)** — Inserted `client_modules` rows (`module = 'reconciliation'`, `enabled = true`) for `edbernal@cdr.com` (`298fa7d4-5c55-4e13-b615-43cc2a0f961f`) across both org_ids (CDR `b986d4d7-ca78-4326-998e-56682352b0e2` and HIG Testing `eb63c19f-a8dd-4f28-8638-b8c522fe4e18`), consistent with the multi-org `user_org_memberships` model. Not yet replicated in production.
+- **Duplicate "Bloomberg Recon." nav item fixed** — `InventoryLayout.tsx` built `enabledModules` from one `client_modules` row per org, so a user with the module enabled on 2 orgs saw it listed twice. Deduped with `[...new Set(...)]`.
+- **Misleading "account switch" on entering Reconciliation fixed** — `Reconciliation.tsx` sidebar footer showed the static `profile.company_name` instead of `activeOrg?.name`, making it look like the active client changed when it hadn't. Also found and fixed a real scoping bug: `loadRuns()` queried `reconciliation_runs` with no `org_id` filter (relying only on RLS), which would mix runs from all of a user's orgs. Both fixed, committed and pushed to `s4sourceio` main (commit `f268afa`).
+- **Sample test CSVs created** for manually exercising the reconciliation upload flow (`ReconciliationModal`) — `bloomberg_sample.csv` (`SID`,`Extended Price`) and `fits_sample.csv` (`KeyPart1`,`CvtCost`), built from real SIDs/prices in HUDSON BAY CAPITAL's (Cust_Num 30656515) subscription list, covering all 5 reconciliation statuses (MATCH, ADJ_POS, ADJ_NEG, ONLY_BLOOMBERG, ONLY_FITS). Saved to `~/Downloads/`.
+- **Entitlement gap noted (not yet tracked as tech debt)** — `client_modules.enabled` only gates sidebar visibility per `user_id`; it does not restrict data access by `org_id`. Revisit if this becomes a real security boundary for a second client.
 
 ---
 
