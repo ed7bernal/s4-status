@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-12 (Phase 4 (R-009) delete/re-upload contract shipped to production)*
+*Last updated: 2026-06-12 (Phase 5 (R-017, R-007) shipped to production)*
 
 ---
 
@@ -48,6 +48,8 @@
 - **Exchange Rates — dynamic per-org currency list** (R-002) — Periods > Exchange Rates now supports adding new currencies (code + initial rate) and disabling/hiding currencies an org doesn't use, plus FX carry-forward on period close.
 - **"Needs Information" report rework** — Renamed from "External Documents Required" and broadened to also surface approved contracts flagged `needs_review`/`needs_attention` (not just ones missing supplemental docs). New pill filters: Not Approved · Needs Review · Needs Attention · Resolved · All. Added a "Mark as resolved" action on report cards that clears `review_status`; contracts with nothing left to track drop off the report entirely.
 - **Delete/re-upload active contract (R-009)** — From a contract's detail page, admins can delete (or archive, if it has allocations/history) the existing contract and re-upload a new one from Inventory, linked to the same vendor. `process-contract` now stores the PDF and defaults new contracts to `Draft` status, matching the batch pipeline. `delete_active_contract` and `delete_inventory_review_item` RPCs are now admin-only, matching the table's RLS delete policy.
+- **Orphan-invoice contract matching threshold raised (R-017)** — `reconcile-inventory-batch`'s `planOrphanInvoiceLinks` threshold raised from 0.30 to 0.50, fixing a Dice-coefficient false positive (e.g. "CBINSIGHTS" incorrectly linking to a "ProSights Labs" contract on shared "sights" substring).
+- **Upload Results stale-data fix (R-007)** — Navigating between different uploads' Results pages now shows a loading skeleton instead of briefly flashing the previous upload's cards/header.
 
 ---
 
@@ -105,7 +107,6 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
 - **`link_contract` UI** — Backend action live, UI trigger not built.
-- **CBInsights/ProSights Dice coefficient false positive** — "sights" suffix causes ~0.48 score (above 0.30 threshold), causing an invoice to link to the wrong contract. Tracked as `R-017` in `PRODUCT_REVIEW_BACKLOG.md`. Threshold fix and one-off data correction deferred.
 - **Not a match button** — Hidden for now. Flow and requirements need validation before re-enabling.
 
 ---
@@ -144,6 +145,15 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-12 session — Phase 5 (R-017, R-007) shipped to production)
+
+- **R-017 (vendor matching false positive)** — `reconcile-inventory-batch/index.ts` `CONTRACT_MATCH_THRESHOLD` raised from 0.30 to 0.50. This is a general fix (single constant, not vendor-specific) — before deciding, simulated both thresholds against all 21 real orphan-invoice/Draft-contract pairs on staging plus a sample of 8 contracts. At 0.50, the CBINSIGHTS/ProSights Labs false positive (score ~0.455) is rejected; the only other pair affected was Factiva↔Dow Jones (score ~0.471, a true positive — Factiva is a Dow Jones brand), which now requires manual linking instead of auto-linking. Net improvement accepted by Edgar. Added a regression test. One-off data fix reverted the bad CBINSIGHTS→ProSights Labs link on staging (`invoices.contract_id` → null, `vendor_match_status` → unmatched, corresponding `inventory_upload_items` row reverted). Checked production for the same pattern — only one linked orphan pair exists ("AgFlow"→"AgFlow SA", score ~1.0, a true positive) — no data fix needed in prod. Deployed to staging and production (`verify_jwt` already off on both).
+- **R-007 (stale data on Upload Results navigation)** — Root cause was isolated to `InventoryUploadDetail.tsx`: a `hasLoadedOnce` ref stayed `true` across navigation to a different upload, so `setLoading(true)` never re-fired and the previous upload's cards/header briefly stayed on screen. Fixed with a `prevUploadIdRef` that detects a real `upload_id` change (not a poll/refresh on the same upload) and resets `loading`/`detailsReady`/fingerprint state. Audited the other 4 pages with navigable route params (`ContractDetail`, `InvoiceDetail`, `InventoryContractDetail`, `InventoryVendorDetail`) — all already handle this correctly, so this was not a transversal issue and no other pages needed changes. Validated locally against staging data, then pushed to `s4sourceio` main (direct production deploy, no separate frontend staging).
+- Both items used a lighter targeted review instead of the full `/code-review` multi-agent flow, given the small diff size (1 constant + 1 test; 1 ref + ~8 lines in one effect).
+- Phase 5 of the `/app-review` action plan is now closed. All items from the original 2026-06-10 action plan (R-001 through R-017, except deferred R-003 and discarded R-012) are Done.
 
 ---
 
