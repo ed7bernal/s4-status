@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-11 (Needs Information report rework shipped to production)*
+*Last updated: 2026-06-12 (Phase 4 (R-009) delete/re-upload contract shipped to production)*
 
 ---
 
@@ -47,6 +47,7 @@
 - **Inventory Users — explicit Active/Inactive action** (R-001) — Row-level action plus bulk multi-select to set users active/inactive (replaces the old inline toggle).
 - **Exchange Rates — dynamic per-org currency list** (R-002) — Periods > Exchange Rates now supports adding new currencies (code + initial rate) and disabling/hiding currencies an org doesn't use, plus FX carry-forward on period close.
 - **"Needs Information" report rework** — Renamed from "External Documents Required" and broadened to also surface approved contracts flagged `needs_review`/`needs_attention` (not just ones missing supplemental docs). New pill filters: Not Approved · Needs Review · Needs Attention · Resolved · All. Added a "Mark as resolved" action on report cards that clears `review_status`; contracts with nothing left to track drop off the report entirely.
+- **Delete/re-upload active contract (R-009)** — From a contract's detail page, admins can delete (or archive, if it has allocations/history) the existing contract and re-upload a new one from Inventory, linked to the same vendor. `process-contract` now stores the PDF and defaults new contracts to `Draft` status, matching the batch pipeline. `delete_active_contract` and `delete_inventory_review_item` RPCs are now admin-only, matching the table's RLS delete policy.
 
 ---
 
@@ -133,6 +134,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 - **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849+), several unused state vars. Not causing runtime issues.
 - **HIG Testing exchange rates** — Only June 2026 rates configured. Need EUR/GBP rates for July 2026+ before next close.
 - **Admin invite-user-by-email flow** — Approved Gate 1 plan, deferred until onboarding volume justifies it. See `docs/tech-debt/admin-invite-user-flow.md`.
+- **Duplicated PDF-upload helper** — `uploadPdfToStorage`/signed-URL logic is now duplicated between `process-contract` and `process-inventory-document`. Should be consolidated into `_shared/`.
 
 ---
 
@@ -142,6 +144,17 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-06-12 session — Phase 4 (R-009) delete/re-upload contract shipped to production)
+
+- **R-009 (delete/archive + re-upload contract under same vendor)** validated by Edgar on staging, then shipped to production.
+- **R-012 (manual contract creation)** discarded — R-009's delete/re-upload flow already covers the use case; marked "Won't Do" in `PRODUCT_REVIEW_BACKLOG.md`.
+- **Extraction quality check** — confirmed `process-contract` (individual upload) and `process-inventory-document` (batch) use identical OCR/extraction logic. The perceived quality gap was due to `process-contract` not storing a PDF and defaulting status to `Active` instead of `Draft`. Both fixed and deployed to staging + production.
+- **Production hotfix** — a premature frontend deploy (push to `s4sourceio` main = production deploy) exposed the R-009 UI before the backend was synced, causing a "function not found" error when deleting a contract. Fixed by applying the pending migration and redeploying `process-contract` to production, plus a one-off data fix (`source = 'inventory_upload'`) on the re-created contract.
+- **Gate 3 security fix** — `delete_active_contract` and `delete_inventory_review_item` only checked org membership (any role); now require `role = 'admin'`, matching the contracts table's DELETE RLS policy. Deployed to staging and production.
+- **Operational note**: pushing to `s4sourceio` main deploys directly to production — any frontend change touching a new backend RPC/Edge Function must have that backend already live in prod first.
 
 ---
 
