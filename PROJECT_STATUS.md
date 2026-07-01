@@ -1,10 +1,11 @@
 # Source S4 — Product Status
-*Last updated: 2026-06-12 (Phase 5 (R-017, R-007) shipped to production)*
+*Last updated: 2026-07-01 (Billing Module Grupo A shipped to production)*
 
 ---
 
 ## What's live in production
 
+- **Billing Module — Grupo A (IRW)** — Invoice Reconciliation Worksheet live in production. Given an invoice matched to a service, the system generates a breakdown per month × user (via `get_invoice_reconciliation` RPC v5), showing Expected vs Invoice vs Variance. IRW panel appears in InvoiceDetail, InventoryContractDetail, and InventoryVendorDetail. Gated by `client_modules.module = 'inventory'` per org. Org isolation bug fixed: batch uploads now correctly scope to the active client in all modes (new batch, append, retry). `invoices.status` now supports `'approved'`; `invoices.approved_at` column added.
 - **Invoice Processing** — PDF upload → OCR → LLM extraction → vendor match → account match → service match → saved to DB with PDF stored securely.
 - **Contract Processing** — PDF upload → OCR → LLM extraction → vendor match → services created → PDF stored. Now derives `annual_value` automatically from extracted contract value.
 - **Vendor Match Resolution** — Confirm vendor, create new, or link invoice to contract manually. Vendor backfill: approving a contract auto-links all invoices with matching vendor name.
