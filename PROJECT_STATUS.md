@@ -1,10 +1,11 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-02 (Billing Module Grupo B shipped to production)*
+*Last updated: 2026-07-02 (Billing Module P2.4 — IRW Dataset 1 shipped to production)*
 
 ---
 
 ## What's live in production
 
+- **Billing Module — P2.4 (IRW Dataset 1 — historical snapshots)** — `get_invoice_reconciliation` now includes a UNION with `inventory_period_snapshots` (Dataset 1) for months already closed, plus a NOT EXISTS guard on `service_subscriptions` (Dataset 2) to prevent duplication. Invoices spanning closed periods now show frozen snapshot values for archived months and live subscription values for current months. `create_invoice_distributions` also updated with the same UNION pattern so distribution amounts match what the user approved. Fixes: billing_period_id fallback for invoices with no explicit billing dates; ROUND(expected_subtotal, 2) in Dataset 1; GRANT EXECUTE added. Validated on staging and deployed to production.
 - **Billing Module — Grupo B (Adjustments + Approve + Distributions)** — Full invoice approval flow live. Users can create adjustments to close the variance (tab "Invoice Adjustments" alongside the IRW), approve the invoice once `net_variance ≈ 0`, and the system generates per-user distributions (`invoice_distributions` table — equivalent of Senthio's `Invoices_Adj`). `get_invoice_reconciliation` v6 returns `adjustments_total` and `net_variance`. `create_invoice_distributions` RPC is idempotent and generates rows from `service_subscriptions` (one per month × user over billing range) plus `invoice_adjustments` rows. Validated end-to-end: Tax Analysts invoice 50217 ($8,751.60), adjustment $1,037.85, approved — 34 distribution rows generated, SUM = $8,751.60.
 - **Billing Module — Grupo A (IRW)** — Invoice Reconciliation Worksheet live in production. Given an invoice matched to a service, the system generates a breakdown per month × user (via `get_invoice_reconciliation` RPC), showing Expected vs Invoice vs Variance. IRW panel appears in InvoiceDetail, InventoryContractDetail, and InventoryVendorDetail. Gated by `client_modules.module = 'inventory'` per org. Org isolation bug fixed: batch uploads now correctly scope to the active client in all modes (new batch, append, retry). `invoices.status` now supports `'approved'`; `invoices.approved_at` column added.
 - **Invoice Processing** — PDF upload → OCR → LLM extraction → vendor match → account match → service match → saved to DB with PDF stored securely.
