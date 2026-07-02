@@ -1,11 +1,12 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-01 (Billing Module Grupo A shipped to production)*
+*Last updated: 2026-07-02 (Billing Module Grupo B shipped to production)*
 
 ---
 
 ## What's live in production
 
-- **Billing Module — Grupo A (IRW)** — Invoice Reconciliation Worksheet live in production. Given an invoice matched to a service, the system generates a breakdown per month × user (via `get_invoice_reconciliation` RPC v5), showing Expected vs Invoice vs Variance. IRW panel appears in InvoiceDetail, InventoryContractDetail, and InventoryVendorDetail. Gated by `client_modules.module = 'inventory'` per org. Org isolation bug fixed: batch uploads now correctly scope to the active client in all modes (new batch, append, retry). `invoices.status` now supports `'approved'`; `invoices.approved_at` column added.
+- **Billing Module — Grupo B (Adjustments + Approve + Distributions)** — Full invoice approval flow live. Users can create adjustments to close the variance (tab "Invoice Adjustments" alongside the IRW), approve the invoice once `net_variance ≈ 0`, and the system generates per-user distributions (`invoice_distributions` table — equivalent of Senthio's `Invoices_Adj`). `get_invoice_reconciliation` v6 returns `adjustments_total` and `net_variance`. `create_invoice_distributions` RPC is idempotent and generates rows from `service_subscriptions` (one per month × user over billing range) plus `invoice_adjustments` rows. Validated end-to-end: Tax Analysts invoice 50217 ($8,751.60), adjustment $1,037.85, approved — 34 distribution rows generated, SUM = $8,751.60.
+- **Billing Module — Grupo A (IRW)** — Invoice Reconciliation Worksheet live in production. Given an invoice matched to a service, the system generates a breakdown per month × user (via `get_invoice_reconciliation` RPC), showing Expected vs Invoice vs Variance. IRW panel appears in InvoiceDetail, InventoryContractDetail, and InventoryVendorDetail. Gated by `client_modules.module = 'inventory'` per org. Org isolation bug fixed: batch uploads now correctly scope to the active client in all modes (new batch, append, retry). `invoices.status` now supports `'approved'`; `invoices.approved_at` column added.
 - **Invoice Processing** — PDF upload → OCR → LLM extraction → vendor match → account match → service match → saved to DB with PDF stored securely.
 - **Contract Processing** — PDF upload → OCR → LLM extraction → vendor match → services created → PDF stored. Now derives `annual_value` automatically from extracted contract value.
 - **Vendor Match Resolution** — Confirm vendor, create new, or link invoice to contract manually. Vendor backfill: approving a contract auto-links all invoices with matching vendor name.
@@ -113,15 +114,16 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ---
 
-## Coming next (priority order for CDNR demo)
+## Coming next (priority order)
 
-1. Missing invoices view (services without invoice in current period)
-2. Cost per user view
-3. Renewal alerts (contracts approaching cancel_lead_time_days)
-4. Bloomberg Terminal Upload (CSV-based, after HR file already live)
-5. Spend/Inventory report with adjustments + forecast
-6. Bloomberg Terminal Reconciliation (review with Santi)
-7. Monthly pricing fix — after Santiago review
+1. **Grupo C — Validación vs Senthio** — Exportar datos de junio de Senthio → importar en S4 staging → correr reconciliación → comparar `invoice_distributions` vs `Invoices_Adj` de Senthio. Si coinciden, Source está validado.
+2. Missing invoices view (services without invoice in current period)
+3. Cost per user view
+4. Renewal alerts (contracts approaching cancel_lead_time_days)
+5. Bloomberg Terminal Upload (CSV-based, after HR file already live)
+6. Spend/Inventory report with adjustments + forecast
+7. Bloomberg Terminal Reconciliation (review with Santi)
+8. Monthly pricing fix — after Santiago review
 
 ---
 
@@ -129,7 +131,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 - **Batch upload scalability** — In-process polling + sequential dispatch breaks at ~50 docs. See `docs/tech-debt/batch-upload-scalability.md`
 - **Service split/merge UI** — See `docs/tech-debt/service-split-merge.md`
-- **Invoice variance/adjustments** — When invoice ≠ inventory expected amount, need adjustment records (Senthio: `Invoices_Adj`). Deferred post-MVP.
+- **Invoice variance/adjustments** — ✅ Done (Grupo B). `invoice_adjustments` + `invoice_distributions` in production.
 - **Soft/Hard dollar classification** — Senthio tracks Hard$ vs Soft$ per user. Deferred.
 - **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
 - **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. Full fix requires `ServicesFP` equivalent. See `docs/tech-debt/service-pricing-schedule.md`
@@ -147,6 +149,17 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-07-02 session — Billing Module Grupo B shipped to production)
+
+- **`invoice_adjustments` table** (`20260701000007`) — new table for per-invoice variance adjustments, RLS via `user_org_memberships`. `contract_id` stored on each adjustment row.
+- **`invoice_distributions` table** (`20260701000008`) — equivalent of Senthio's `Invoices_Adj`. Stores per-user, per-month cost distribution rows generated at invoice approval.
+- **`create_invoice_distributions` RPC** (`20260701000009`) — SECURITY DEFINER, idempotent. Generates distribution rows from `service_subscriptions` (one per month × user over billing range) plus `invoice_adjustments` (is_adjustment=true). Includes FX conversion via `exchange_rates`.
+- **`get_invoice_reconciliation` v6** (`20260701000010`) — adds `adjustments_total` and `net_variance` to the return payload. `net_variance ≈ 0` enables Approve.
+- **Frontend: Invoice Adjustments tab + Approve Invoice** — `InventoryContractDetail.tsx` and `InvoiceDetail.tsx` now show two tabs: "Invoice Reconciliation Worksheet" and "Invoice Adjustments". Approve Invoice button enabled when `|net_variance| < 0.01`. Inline add/delete form; Year/Month derived from `billing_start_date`.
+- **End-to-end validated** — Tax Analysts invoice 50217 ($8,751.60): adjustment $1,037.85, approved. 34 rows in `invoice_distributions`, SUM = $8,751.60.
 
 ---
 
