@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-02 (Billing Module P2.4 — IRW Dataset 1 shipped to production)*
+*Last updated: 2026-07-06 (action plan re-prioritized from 2026-07-02 weekly with Santiago; R-021/R-022 added to backlog)*
 
 ---
 
@@ -117,14 +117,23 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Coming next (priority order)
 
-1. **Grupo C — Validación vs Senthio** — Exportar datos de junio de Senthio → importar en S4 staging → correr reconciliación → comparar `invoice_distributions` vs `Invoices_Adj` de Senthio. Si coinciden, Source está validado.
-2. Missing invoices view (services without invoice in current period)
-3. Cost per user view
-4. Renewal alerts (contracts approaching cancel_lead_time_days)
-5. Bloomberg Terminal Upload (CSV-based, after HR file already live)
-6. Spend/Inventory report with adjustments + forecast
-7. Bloomberg Terminal Reconciliation (review with Santi)
-8. Monthly pricing fix — after Santiago review
+*Re-prioritized 2026-07-06 after the 2026-07-02 weekly with Santiago (transcript reviewed). Santiago is available Mon–Wed Jul 6–8, on vacation from Thu Jul 9 — items 1–3 should be validated with him before Thursday.*
+
+1. **Demo-case diagnosis (Deep Tree)** — Verify the invoice's `billing_start_date`/`billing_end_date` in staging (IRW showed contract period feb-26→feb-27 instead of invoice billing range; RPC v7 logic is correct — likely bad data). Also locate the current/future reconciliation generation view shown in the demo (not versioned in this repo) and confirm it derives months from invoice billing start/end.
+2. **Deep Tree data cleanup + Monthly pricing normalization (P1)** — The $944.50 expected (vs ~$880 in contract) came from a Senthio-loaded `annual_value`. Clean staging data and close out P1 (AI using monthly price as annual value) with Santiago — the 2026-07-02 call effectively confirmed the expected value must derive from the contract's monthly average × months + tax.
+3. **Grupo C — Validación vs Senthio (June archive)** — Prereq: load July 2026 EUR/GBP exchange rates for HIG Testing (see Technical debt). Export June data from Senthio → import to S4 staging → close June billing period (generates Dataset 1 snapshots) → move system to July → verify the union query returns archived + current + future correctly → compare `invoice_distributions` vs Senthio's `Invoices_Adj`. Watch G-22 (org_users 1000-row cap) when loading the full roster.
+4. **10–20 real reconciliations end-to-end** — On the HIG Testing E2E dataset: cover zero-variance (direct approve) and minor-adjustment cases. Bloomberg deferred (different code/logic scenario).
+5. **R-021 — Adjustments tab as multi-user table** — reuse Allocation multi-select modal pattern (see backlog).
+6. **R-022 — Billing accounts shared across contracts** — spike Route A (include/exclude in IRW) vs Route B (synthetic `vendor-{contract_id}` accounts); decide with Santiago before Jul 9 if possible (see backlog).
+7. **Security & Compliance (~50% of time from week of Jul 13)** — Execute `docs/security/security-compliance-roadmap.md`: Track 1 first (A50 GCP key file — urgent, open since June; A51 JWT toggle; A52 secrets audit; A53 MFA), Track 3 in parallel (A58 asset inventory + data flow, A59 core policies, A60 client one-pager — this is the documentation Santiago asked for, incl. CDR due-diligence/business continuity). Fold in R-018 (audit logging/SSO) rather than running it separately. **Immediate pending:** review Supabase free-tier limits → tell Santi whether production needs a plan upgrade (promised 2026-07-02, overdue).
+8. Missing invoices view (services without invoice in current period)
+9. Cost per user view
+10. Renewal alerts (contracts approaching cancel_lead_time_days)
+11. Bloomberg Terminal Upload (CSV-based, after HR file already live)
+12. Spend/Inventory report with adjustments + forecast
+13. Bloomberg Terminal Reconciliation (review with Santi)
+
+**Note (from 2026-07-02 weekly):** R-003 (reopen closed billing period, deferred pending Santiago's input) becomes operationally relevant as soon as Grupo C closes June for real — raise it with Santiago this week.
 
 ---
 
