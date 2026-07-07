@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-06 (action plan re-prioritized from 2026-07-02 weekly with Santiago; R-021/R-022 added to backlog)*
+*Last updated: 2026-07-07 (Grupo C data-prep session — HIG Testing staging dataset rebuilt from real Senthio data, invoice reconciliation now handles multi-service invoices and folds adjustments into the monthly close; 17 of 23 test invoices approved end-to-end)*
 
 ---
 
@@ -107,6 +107,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## What's in development
 
+- **Grupo C — validating Source against Senthio (staging only)** — HIG Testing's test data was wiped and rebuilt with 23 real contracts + invoices, matched vendor-by-vendor and service-by-service against Senthio's own records so the two systems can be compared apples-to-apples. Along the way this surfaced and fixed 3 real calculation bugs (see Recent changes below) and added the ability for one invoice to cover more than one service. 17 of the 23 test invoices are now fully approved; 6 are deliberately on hold pending Santiago's input on how unusual billing situations (one-time charges, usage-based vendors, hardware purchases) should be handled — see "Where your input would help." None of this session's fixes have reached production yet.
 - **Vendor grouping for new clients** — Spec/prompt ready, implementation pending.
 - **Monthly pricing normalization (P1)** — When contract states prices monthly, AI uses monthly price as annual value. Fix pending Santiago review.
 - **Service split/merge UI** — Deferred. Waiting for Santiago validation.
@@ -121,11 +122,11 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 1. ✅ **Demo-case diagnosis (Deep Tree) — root cause found and fixed 2026-07-06.** Not bad data: `get_invoice_reconciliation`/`create_invoice_distributions` over-counted one month whenever billing_end's day-of-month is earlier than billing_start's (e.g. 2026-06-28→2027-06-27, an exact 12-month term, generated 13 monthly rows). Fixed in v8 (`20260706000001_rpc_month_count_fix_v8.sql`) — computes true elapsed months via `months_between(billing_start, billing_end + 1 day)` instead of truncating both ends to month-start. Validated against 3 real HIG Testing invoices (CB Insights 13→12 months, Mimecast and Third Bridge Forum 4→3 months each). **Deployed to staging only — production deploy pending**, staging-first per deploy rules. This was a global bug affecting every org, not staging-data-specific; recommend auditing already-approved production invoices with a similar end-day < start-day billing range after prod deploy, since their frozen `invoice_adjustments` may now be off by the removed month.
 2. **Deep Tree data cleanup + Monthly pricing normalization (P1)** — The $944.50 expected (vs ~$880 in contract) came from a Senthio-loaded `annual_value`. Clean staging data and close out P1 (AI using monthly price as annual value) with Santiago — the 2026-07-02 call effectively confirmed the expected value must derive from the contract's monthly average × months + tax.
-3. **Grupo C — Validación vs Senthio (June archive)** — Prereq: load July 2026 EUR/GBP exchange rates for HIG Testing (see Technical debt). Export June data from Senthio → import to S4 staging → close June billing period (generates Dataset 1 snapshots) → move system to July → verify the union query returns archived + current + future correctly → compare against Senthio. **Comparison target corrected (2026-07-06, verified against the .accdb):** Senthio's `Invoices_Adj` holds ONLY manual adjustments (equivalent of our `invoice_adjustments`); the full per-user close output is `Inventory_R` — compare `inventory_period_snapshots`/`invoice_distributions` vs `Inventory_R`, and `invoice_adjustments` vs `Invoices_Adj`. Watch G-22 (org_users 1000-row cap) when loading the full roster.
-4. **10–20 real reconciliations end-to-end** — On the HIG Testing E2E dataset: cover zero-variance (direct approve) and minor-adjustment cases. Bloomberg deferred (different code/logic scenario).
-5. **R-021 — Adjustments tab as multi-user table** — reuse Allocation multi-select modal pattern (see backlog).
-6. **R-022 — Billing accounts shared across contracts** — spike Route A (include/exclude in IRW) vs Route B (synthetic `vendor-{contract_id}` accounts); decide with Santiago before Jul 9 if possible (see backlog).
-7. **Security & Compliance (~50% of time from week of Jul 13)** — Execute `docs/security/security-compliance-roadmap.md`: Track 1 first (A50 GCP key file — urgent, open since June; A51 JWT toggle; A52 secrets audit; A53 MFA), Track 3 in parallel (A58 asset inventory + data flow, A59 core policies, A60 client one-pager — this is the documentation Santiago asked for, incl. CDR due-diligence/business continuity). Fold in R-018 (audit logging/SSO) rather than running it separately. **Immediate pending:** review Supabase free-tier limits → tell Santi whether production needs a plan upgrade (promised 2026-07-02, overdue).
+3. **Grupo C — Validación vs Senthio (June archive)** — ✅ **Executed 2026-07-06/07 on staging.** HIG Testing's test data rebuilt from real Senthio records (23 contracts + invoices), June 2026 billing period closed (twice — once to validate, then reset so the full flow can be re-run live with Santiago), monthly snapshot generated. The month-count and multi-service bugs found along the way (see Recent changes) were blocking an accurate close and are now fixed on staging. **Still open:** a real line-by-line dollar comparison against Senthio's actual `Inventory_R`/`Invoices_Adj` for June hasn't been done yet (today validated that the *mechanism* is correct, not that the final numbers match Senthio's to the cent) — and a "missing invoices in an already-closed period" report (Senthio's `qryInventoryH` equivalent) still needs to be built. Watch G-22 (org_users 1000-row cap) when loading the full roster.
+4. **10–20 real reconciliations end-to-end** — ✅ **Done, exceeded scope.** 17 of 23 real test invoices approved (10 clean matches + 7 with a small rounding adjustment), each generating real per-user distribution rows. 6 left deliberately unapproved — see "Where your input would help."
+5. **R-021 — Adjustments tab as multi-user table** — ✅ **Built and validated 2026-07-06** on staging — select multiple users at once, set amount/tax per row in one pass, reusing the Allocation multi-select pattern. A regression (no way to add an adjustment without picking a user) was found and fixed the same day.
+6. **R-022 — Billing accounts shared across contracts** — ✅ **Solved 2026-07-06**, more thoroughly than originally scoped — an invoice can now be linked to more than one service (new `invoice_services` table), validated live on two real cases (a Mimecast invoice covering 4 services, a Capital Economics invoice covering 2). The billing-period close was also updated so it recognizes these multi-service invoices correctly.
+7. **Security & Compliance (~50% of time from week of Jul 13)** — **No progress this session** (2026-07-06 was spent entirely on Grupo C). Still pending, and now more urgent: Execute `docs/security/security-compliance-roadmap.md`: Track 1 first (**A50 GCP key file — confirmed still sitting exposed in `~/Downloads` since May 4, 2+ months, needs rotating in GCP IAM Console**; A51 JWT toggle; A52 secrets audit; A53 MFA), Track 3 in parallel (A58 asset inventory + data flow, A59 core policies, A60 client one-pager — this is the documentation Santiago asked for, incl. CDR due-diligence/business continuity). Fold in R-018 (audit logging/SSO) rather than running it separately. **Immediate pending:** review Supabase free-tier limits → tell Santi whether production needs a plan upgrade (promised 2026-07-02, still overdue).
 8. Missing invoices view (services without invoice in current period)
 9. Cost per user view
 10. Renewal alerts (contracts approaching cancel_lead_time_days)
@@ -133,7 +134,26 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 12. Spend/Inventory report with adjustments + forecast
 13. Bloomberg Terminal Reconciliation (review with Santi)
 
-**Note (from 2026-07-02 weekly):** R-003 (reopen closed billing period, deferred pending Santiago's input) becomes operationally relevant as soon as Grupo C closes June for real — raise it with Santiago this week.
+**Note (from 2026-07-02 weekly):** R-003 (reopen closed billing period) is no longer just a hypothetical — this session had to hand-reset HIG Testing's June period directly in the database (no product feature exists for this yet) specifically to redo the close live with Santiago. Raise it with him directly.
+
+---
+
+## Where your input would help
+
+Six real invoices from the rebuilt HIG Testing test set were deliberately left unapproved because how to treat them isn't a calculation question — it's a product/business judgment call:
+
+1. **AlphaSights (and similar usage-based vendors)** — the "expected" cost is always going to look different from any single month's invoice, because these vendors bill actual usage that varies month to month, not a fixed subscription. Question: should Source try to mirror Senthio's manual monthly re-allocation process for these vendors, or is a routine Invoice Adjustment the intended answer every month?
+2. **DeepTree** — this specific invoice is a one-time "added 2 seats" charge, not the recurring subscription fee. Confirmed Senthio itself never tries to reconcile this type of invoice against the ongoing service cost — it's simply paid and filed. Same question likely applies to any vendor with similar "adding capacity mid-contract" invoices.
+3. **FIS** — turned out to be an entirely different kind of charge (an overage fee for exceeding a user limit) than the annual subscription fee we had on file — unrelated dollar amounts, same vendor/contract.
+4. **Nxt Gen Technologies (AvePoint)** — this invoice is a one-time hardware purchase (a physical backup appliance), not the AvePoint cloud subscription.
+5. **Third Bridge (Forum contract)** — this invoice appears to be the final installment of a contract that started back in 2024, entered into the system two years late; the going rate we have on file may reflect a newer renewal that this old invoice was never meant to match.
+6. **PEI** — a small $67.84 gap between the invoice and what's recorded in Senthio, with no obvious explanation (not a rounding issue, not an escalator).
+
+Full detail and evidence for each is documented in `scripts/staging-reset-hig-testing/vendor-pricing-validation.md`.
+
+Two more decisions from earlier in the week that still need an answer:
+- **Supabase plan upgrade** — promised an answer to Santiago on 2026-07-02, still pending.
+- **GCP key file** — confirmed sitting unprotected in `~/Downloads` since May 4; needs a decision on rotating/revoking it in the GCP console.
 
 ---
 
@@ -159,6 +179,21 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-07-06/07 session — Grupo C data prep, staging only)
+
+This session's goal was to get HIG Testing's test data ready for a real side-by-side comparison against Senthio (the Access database HIG currently uses), and rehearse the full invoice-reconciliation flow before doing it live with Santiago. Everything below happened on staging only — nothing reached production yet.
+
+- **Rebuilt HIG Testing's test data from scratch, using real records.** The old test data was made-up and messy. It's been replaced with 23 real contracts and their matching invoices, with vendor names, service names, and pricing all lined up to match Senthio's own records, so any comparison between the two systems is apples-to-apples.
+- **Found and fixed a real calculation bug affecting every client, not just this test data.** The invoice-reconciliation calculation was counting one extra month in specific cases — whenever a contract's billing period ends on an earlier day-of-month than it starts (a common pattern for annual contracts renewing "the day before" the anniversary). This made the system's expected cost look too high for those invoices. Fixed and confirmed against several real examples. **This fix is on staging only — production still has the bug**, so this should be prioritized for a proper review and deploy soon, and any already-approved production invoices with this pattern should be double-checked afterward.
+- **An invoice can now cover more than one service.** Previously, if one bill from a vendor covered two different services (for example, a Mimecast invoice that includes both email security and Teams archiving), the system could only "see" one of them and always showed a mismatch. Users can now explicitly tell the system which services a given invoice covers, and the expected-cost calculation adds them all up correctly. Validated live on two real invoices.
+- **Manual cost adjustments can now be applied to several people at once**, instead of one at a time — matching how Santiago asked for this back on 2026-07-02. Also found and fixed a small follow-up bug where adjustments couldn't be entered without picking a specific person, even when the adjustment wasn't about any one individual.
+- **Closing a billing period now also carries forward manual adjustments into the permanent monthly record**, matching how Senthio itself does it. Before this fix, an adjustment used to approve an invoice would "disappear" from the historical record once the period closed, even though the invoice itself was correctly approved.
+- **17 of the 23 real test invoices are now fully approved and reconciled end-to-end** (10 with no adjustment needed, 7 needing a small rounding adjustment). The remaining 6 were left unapproved on purpose — see "Where your input would help" above.
+- **Found a genuine, unprotected Google Cloud credentials file** sitting in Downloads since May 4th (2+ months) — flagged for Santiago, needs rotating.
+- Two small UI polish items were requested from the frontend session and are still pending: showing the after-adjustment variance number instead of the before-adjustment one in the invoice summary, and clearer labeling on the monthly cost report (which numbers are "the full service cost" vs. "this person's share").
 
 ---
 
