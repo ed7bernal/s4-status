@@ -194,6 +194,27 @@ Two more decisions from earlier in the week that still need an answer:
 
 ---
 
+## Recent changes (2026-07-12 session — deep staging-vs-prod parity audit, drift fixed)
+
+Full audit comparing live state (not just migration history) between staging (`fntpcrpmkwyruzplbewq`) and production (`fdcxcivjhobreuseacot`): all 141 migrations, every public function definition (hash-diffed), all columns, indexes, RLS policies, all 13 Edge Functions (source downloaded and diffed), verify_jwt settings, and frontend deploy state.
+
+**Already in sync:** migrations, columns, RLS policies, verify_jwt (false × 13 × both), 12 of 13 Edge Functions.
+
+**Drift found and fixed (5 findings, all pre-dating R-025):**
+1. **`match-invoice-service`** — staging had been running (since ~2026-05-26) an improved version (resolves `contract_id` + `billing_period_id` on match, auto-matches single-service vendors) that existed **nowhere in git**; repo and prod had the old version. Without `billing_period_id`, prod-matched invoices are invisible to Billing/IRW. Fixed: staging source committed to repo verbatim, deployed to prod (v5).
+2. **`audit_log_trigger`** — staging and prod each had a *different* untracked manual patch (both extending the original to resolve user from `app.current_user_id`). Canonicalized on staging's variant via migration `20260712000001`, applied to both.
+3. **`idx_invoices_billing_period_id`** — staging had a hand-made composite `(org_id, billing_period_id)` version; prod had the original. Composite adopted as canonical (matches every consumer's filter shape) via the same migration.
+4. **`vendors_name_trgm_idx` + `vendors_name_user_id_key`** — existed only in prod (manual, untracked). Added to staging via migration (pre-checked: no duplicate rows blocking the unique index).
+5. **`vendor_aliases_alias_user_id_key`** — staging-only legacy constraint from the pre-multi-org model; a latent staging-only bug (same alias in two orgs would fail only there). Dropped via migration. The real constraint (`alias, org_id`) exists in both.
+
+Also converged: `get_invoice_reconciliation`/`create_invoice_distributions` on staging had comment-only diffs from the R-022 manual re-apply — re-applied verbatim from the canonical migration file. **Post-fix verification: every function and index now hash-identical between environments.** Smoke-tested `get_billing_invoices` on both (staging 23 rows, prod 3 rows, no errors).
+
+**Frontend finding:** `s4sourceio.lovable.app` (documented as the staging frontend) just 302-redirects to `s4source.io` — there is no staging frontend; validation is local `npm run dev` + `.env.staging`. Also confirmed with Edgar: **push to `main` alone does not deploy — he must click Publish in Lovable** (the old "never use Publish" guidance was wrong).
+
+**Process changes:** CLAUDE.md — environments table corrected, new deploy rule 4 (no drift accumulation, `db push` only, parity check at session close). `how-we-build.md` — Step 4 rewritten (deploy to prod as part of closing each item, not batched "later"; correct Lovable Publish flow; re-link staging after prod work) and new Step 6 (parity checklist at every session close).
+
+---
+
 ## Recent changes (2026-07-12 session — R-025 + accumulated backend work deployed to production)
 
 - **`invoice-agent-mvp`**: `feat/r025-billing-table` merged to `main`, pushed. 11 migrations applied to production (`fdcxcivjhobreuseacot`) via `supabase db push` — `20260706000001` through `20260710000002`. This was the first production deploy for all of them; everything from R-022 (invoice_services multi-match) through R-026 (cross-contract billing account) and the month-count fix (v8) had been staging-only until now. Confirmed via `supabase migration list --linked` that all 11 show a `Remote` timestamp post-push.
