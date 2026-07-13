@@ -131,6 +131,8 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
    - R-027 — retroactive matching of a late invoice against an already-closed period (flips a `missing_invoice` snapshot row to `matched` without a full period reopen). Scoped, not started.
    - **Security — 2 overdue items, real risk not product**: rotate the GCP key exposed in `~/Downloads` since 2026-05-04 (2+ months); answer Santiago on the Supabase plan upgrade (promised 2026-07-02, still pending).
    - R-032 — 12 pre-existing TypeScript errors (found 2026-07-10), grouped by root cause in the backlog row. Cleanup, no urgency.
+   - **App-wide E2E pass starting 2026-07-14** — Edgar testing the full app end-to-end to surface UI/UX improvements before the 07-20 call. Findings go through `/app-review` into the backlog as usual.
+   - R-033 (Ask AI) — reviewed for feasibility 2026-07-13 (~2-3 days, low-medium priority), explicitly sequenced by Edgar for **after** R-029 and after the E2E polish pass above — not competing with the items above for near-term time.
 3. **Blocked:**
    - R-028 (edit archived-period metadata) — depends on R-003 (reopen a closed period), which depends on Edgar's still-pending conversation with his manager about whether closed periods should be editable at all.
 4. **Data work, not product:**
