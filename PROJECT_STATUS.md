@@ -1,10 +1,14 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-13 (Reports module — Overview + Vendors/Users sheets — deployed to production, closes R-030)*
+*Last updated: 2026-07-17 (Admin page, R-044/R-039 billing fixes, R-027 retroactive adjustments, Ask AI POC — see Recent changes below)*
 
 ---
 
 ## What's live in production
 
+- **Admin page (R-029), deployed 2026-07-15** — S4-staff-only `/admin` route (gated by new `profiles.is_s4_staff`, not `role` or email domain — both were found unreliable): Organizations tab (create org + module checkboxes, member counts, delete with a zero-data guard across 8 tables), Modules tab (toggle `client_modules` per org), Members tab (invite by email via `auth.admin.inviteUserByEmail`, list members, change role, block demoting an org's last admin). 6 new Edge Functions. Replaces the old manual-SQL `client_modules` workflow entirely.
+- **Ask AI POC (R-033), deployed 2026-07-17** — New "Ask AI" tab in Reports. New `ask-report-ai` Edge Function calls Anthropic's Messages API with tool-use, restricted to calling the existing `report_spend_aggregate` RPC only (never raw SQL, never lets the model compute its own sums) — same OLTP/OLAP reasoning as the rest of Reports: `inventory_period_snapshots` already is the analytical layer, no separate warehouse needed at this scale. Single-turn Q&A (chat-style multi-turn deliberately deferred). Rate-limited 20 questions/org/day via new `ask_ai_queries` table (doubles as audit trail). Validated against real data on both staging (HIG Testing) and production (S4 Market Data) — answers matched the RPC ground truth exactly.
+- **Billing/IRW fixes (R-044, R-039, R-027), deployed 2026-07-17** — R-044: same-vendor contract disambiguation in orphan-invoice matching now breaks name-similarity ties using billing-date overlap (fixed a real Third Bridge mismatch). R-039: `get_invoice_reconciliation`/`create_invoice_distributions`'s account-based service inclusion now requires `annual_value > 0`, excluding unpriced/unallocated placeholder services (fixed on Mimecast, regression-checked against the legitimate Third Bridge cross-contract case); also fixed "+Add Service" showing with nothing addable. R-027: a new trigger syncs `invoice_adjustments` into `inventory_period_snapshots` when the adjustment targets an already-closed period — mirrors what Senthio does manually via `Adj Inv`/`Adj Year`/`Adj Month`; deliberately did **not** add automatic date-to-period inference elsewhere (tried it, reverted — that's a human judgment call there too).
+- **Vendor matching fix (R-046), deployed 2026-07-15** — `match_vendor`'s first-token signal used fuzzy similarity, treating any shared first word the same whether generic ("The", "Capital") or distinctive ("Clarksons", "ICE") — caused 11 real false-positive matches in production. Now requires an exact first-token match gated by a new `vendor_name_stopwords` table, or full-name similarity ≥ 0.5.
 - **Reports module — Overview + Vendors/Users sheets, deployed 2026-07-13 (R-030 done, R-031 phase 1+2)** — new `report_spend_aggregate` RPC (generic, whitelisted `group_by`/`split_by`/`filter_by` over `inventory_period_snapshots`) backs three new tabs in Reports: **Overview** (default tab — KPI tiles, monthly spend chart with a Split-by selector, a department-composition donut, Top 10 Vendors/Departments, range-scoped CSV export), and **Vendors**/**Users** (sortable tables with a Share bar + %, expandable rows showing two side-by-side breakdowns each — lazy-loaded, cached per range — with per-entity CSV export). A shared From/To period-range picker persists across all three sheets. Modeled on a reference BI dashboard Santiago shared, adapted to available data (no FO/MBO field, no PM Teams/Cost Savings concept) — explicitly deferred: Bloomberg Terminal deep-dive (Recon not settled), custom widgets, Ask AI (both lowest priority per Santiago's own words, his reference dashboard is fully static). Validated on staging (HIG Testing) and smoke-tested on production with real data (drill-down filter reconciles exactly). See `PRODUCT_REVIEW_BACKLOG.md` R-030/R-031.
 - **Billing Module — deployed 2026-07-12, a full week of accumulated backend work in one batch** (11 migrations, `20260706000001` through `20260710000002` — none of these had reached production before this deploy, staging-only until now): month-count fix v8 (a contract billing period ending on an earlier day-of-month than it starts was counting one extra month — **production audit run post-deploy, zero affected approved invoices found**, no data fix needed); `invoice_services` junction table + v9 RPCs (one invoice can now cover more than one service); `close_billing_period` matching + adjustment-folding fixes (v2); RLS `WITH CHECK` hardening (A54, blocks cross-org `org_id` reassignment on UPDATE); IRW v10 (billing account shown per row) and v11/R-026 (billing account as an invoice-level cross-contract scoping parameter — `invoices.billing_account_id`, eligible services resolved as `invoice_services` ∪ subscriptions sharing that account, across any contract); `invoice_adjustments.tax` fix (was captured but silently ignored in variance/distribution calc); **R-025 — `get_billing_invoices` RPC** (standalone Billing table, cross-contract by vendor/account, computed `reconciled`/`allocated`). **R-026 is now live in production but has not yet been shown to Santiago himself** (he proposed the shape but hasn't validated this implementation — he's back 2026-07-20). See `PRODUCT_REVIEW_BACKLOG.md` R-022–R-026, R-025 for full detail on each.
 - **Billing Module — P2.4 (IRW Dataset 1 — historical snapshots)** — `get_invoice_reconciliation` now includes a UNION with `inventory_period_snapshots` (Dataset 1) for months already closed, plus a NOT EXISTS guard on `service_subscriptions` (Dataset 2) to prevent duplication. Invoices spanning closed periods now show frozen snapshot values for archived months and live subscription values for current months. `create_invoice_distributions` also updated with the same UNION pattern so distribution amounts match what the user approved. Fixes: billing_period_id fallback for invoices with no explicit billing dates; ROUND(expected_subtotal, 2) in Dataset 1; GRANT EXECUTE added. Validated on staging and deployed to production.
@@ -120,28 +124,26 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Coming next (priority order)
 
-*Re-sequenced 2026-07-13. Everything Santiago asked for on the 2026-07-08/07-10 calls (R-023 through R-026, R-030, R-031 phase 1+2) is now in production — see "What's live in production" above. Santiago is back for a call **2026-07-20**; the remaining big items need his input before going further. Target: invoicing + reporting (+ ideally admin) closed out by **end of July**, after which further work is driven by real client feedback in production rather than a fixed roadmap.*
+*Re-sequenced 2026-07-17. Since the last update, R-029 (Admin page), R-032 (TS cleanup), R-036/R-037/R-040 (quick wins), R-044, R-039, R-027, and R-033 (Ask AI POC) all shipped to production — see "What's live in production" and Recent changes below. Security work (roadmap A50-A67) is being tracked in a separate session/chat, not here. Santiago is back for a call **2026-07-20**.*
 
 1. **For the 2026-07-20 call — show, don't build more first:**
    - R-026 (billing account, cross-contract) — live in prod since 2026-07-12, Santiago hasn't seen this implementation yet.
-   - Reports module (Overview + Vendors + Users) — live in prod since 2026-07-13, is the concrete answer to his reporting ask.
-   - Confirm R-029 (admin page) deadline — end of July or after go-live — before committing real time to it.
+   - Reports module (Overview + Vendors + Users + Ask AI) — live in prod, concrete answer to his reporting ask.
+   - Admin page (R-029) — live in prod, ready to show.
    - Align R-031 phase 3+ (Budget vs Actuals, vendor deep-dive) scope — don't build ahead of this conversation.
 2. **Unblocked, can start now:**
-   - R-027 — retroactive matching of a late invoice against an already-closed period (flips a `missing_invoice` snapshot row to `matched` without a full period reopen). Scoped, not started.
-   - **Security — 2 overdue items, real risk not product**: rotate the GCP key exposed in `~/Downloads` since 2026-05-04 (2+ months); answer Santiago on the Supabase plan upgrade (promised 2026-07-02, still pending).
-   - R-032 — 12 pre-existing TypeScript errors (found 2026-07-10), grouped by root cause in the backlog row. Cleanup, no urgency.
-   - **App-wide E2E pass starting 2026-07-14** — Edgar testing the full app end-to-end to surface UI/UX improvements before the 07-20 call. Findings go through `/app-review` into the backlog as usual.
-   - R-033 (Ask AI) — reviewed for feasibility 2026-07-13 (~2-3 days, low-medium priority), explicitly sequenced by Edgar for **after** R-029 and after the E2E polish pass above — not competing with the items above for near-term time.
+   - R-048 — full-name-similarity false positives in vendor matching not fixed by R-046 (e.g. "Real Deals"/"The Real Deal" 0.571) — deliberately deferred pending confirmation of real-world impact.
+   - App-wide E2E pass (started 2026-07-14) — still ongoing; findings continue to flow through `/app-review` into the backlog.
 3. **Blocked:**
    - R-028 (edit archived-period metadata) — depends on R-003 (reopen a closed period), which depends on Edgar's still-pending conversation with his manager about whether closed periods should be editable at all.
 4. **Data work, not product:**
    - Deep Tree data cleanup + Monthly pricing normalization (P1) — close out with Santiago (the 2026-07-02 call confirmed the expected-value derivation, just needs the staging data cleaned).
-   - Grupo C — line-by-line dollar comparison vs Senthio's `Inventory_R`/`Invoices_Adj` for June, plus the "missing invoices in an already-closed period" report (uses R-027's mechanism).
-5. **Backlog, not yet scoped:** Cost per user view · Renewal alerts (`cancel_lead_time_days`) · Bloomberg Terminal Upload (CSV) · Spend/Inventory report with forecast · Bloomberg Terminal Reconciliation.
+   - Grupo C — line-by-line dollar comparison vs Senthio's `Inventory_R`/`Invoices_Adj` for June, plus the "missing invoices in an already-closed period" report (R-027's mechanism now supports this).
+5. **Backlog, not yet scoped:** Cost per user view · Renewal alerts (`cancel_lead_time_days`) · Bloomberg Terminal Upload (CSV) · Spend/Inventory report with forecast · Bloomberg Terminal Reconciliation · Ask AI chat-style multi-turn memory (deliberately deferred, see R-033).
 6. **Small loose ends from recent sessions:**
    - Orphan `invoice_distributions` row for GLG on staging (leftover from Grupo C data prep) — decide whether to clean up.
    - Confirm whether "Processing History" (the old standalone Invoice Processing module) is still an active flow — determines whether `InvoiceDetail.tsx` stays dual-purpose or `/invoices` gets deprecated.
+   - Anthropic API key now live as an `ANTHROPIC_API_KEY` secret on both staging and production (pasted in plain text during the R-033 session) — consider rotating.
 
 **R-003 note (still relevant):** the Grupo C session had to hand-reset HIG Testing's June period directly in the database (no product feature exists for this) to redo the close live with Santiago — it's a real operational gap, not just a hypothetical, and a hard dependency for R-028. Raise it with him directly.
 
@@ -175,7 +177,7 @@ Two more decisions from earlier in the week that still need an answer:
 - **GL Accounts** — Senthio routes expenses to GL accounts via AccountMaps. Deferred.
 - **Multi-year contract pricing** — `service.annual_value` is set at Year 1 price. Full fix requires `ServicesFP` equivalent. See `docs/tech-debt/service-pricing-schedule.md`
 - **Allocations inline editing** — Custom onBlur pattern still in place in `InventoryContractDetail.tsx` ~line 1898. Should use `InlineEditableField`.
-- **Pre-existing TypeScript errors in InventoryUploadDetail.tsx** — `contract_id` not in `ContractData` type (line 849+), several unused state vars. Not causing runtime issues.
+- ~~**Pre-existing TypeScript errors**~~ — ✅ Done (R-032, 2026-07-16). All 8 fixed; 2 were real bugs (not just type gaps), see Recent changes.
 - **HIG Testing exchange rates** — Only June 2026 rates configured. Need EUR/GBP rates for July 2026+ before next close.
 - **Admin invite-user-by-email flow** — Approved Gate 1 plan, deferred until onboarding volume justifies it. See `docs/tech-debt/admin-invite-user-flow.md`.
 - **Duplicated PDF-upload helper** — `uploadPdfToStorage`/signed-URL logic is now duplicated between `process-contract` and `process-inventory-document`. Should be consolidated into `_shared/`.
@@ -188,6 +190,30 @@ Two more decisions from earlier in the week that still need an answer:
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-07-14 to 2026-07-17 sessions — Admin page, quick wins, R-044/R-039/R-027 billing fixes, Ask AI POC)
+
+Multi-day session covering a full `/app-review` pass (Inventory module end-to-end, R-034 through R-048 logged) plus working through the resulting backlog one item at a time, each validated on staging then production before moving to the next. Full per-item detail lives in `PRODUCT_REVIEW_BACKLOG.md`; this is the summary.
+
+**R-029 — Admin page.** Built after an explicit critical-analysis pass with Edgar on scope (S4-staff-only vs. per-org admin). New `profiles.is_s4_staff` flag (deliberately not reusing `role` or email domain — both proved unreliable signals). `/admin` route with Organizations/Modules/Members tabs, 6 new Edge Functions following the existing `requireS4Staff` pattern. Found and fixed a production bug post-deploy: `Admin.tsx`'s `fetch()` calls were missing the `VITE_SUPABASE_URL` fallback that every other page already has for Lovable's build — orgs appeared to save (toast showed success) but silently 404'd.
+
+**R-046 — vendor matching false positives.** Empirically validated every same-org vendor pair scoring ≥0.5 on the first-token signal, in both staging and production: found the fuzzy first-token match couldn't tell "shared generic word" (the/capital/business — false positives) from "shared distinctive brand" (Clarksons/ICE/CoStar — true positives). Fixed with an exact-match + stopword-table gate. R-048 logged as a related, deliberately deferred follow-up (full-name-similarity false positives, different root cause).
+
+**R-036/R-037/R-040 — quick wins**, done one at a time per Edgar's request: Account dropdown now scopes to the selected vendor (`InventoryBilling.tsx`); invoice detail panel shows a loading spinner instead of a `null` flash while data is still loading; Reports' "+N more" became a real expand/collapse toggle (validated against a real 35-user case).
+
+**R-032 — TypeScript cleanup.** Of 8 pre-existing errors, fixed all; 2 were real bugs, not just type gaps — `InventoryUploadDetail.tsx` was never selecting `contract_id`, silently degrading the manual contract-assignment picker's fallback label.
+
+**R-044 — same-vendor contract disambiguation.** `reconcile-inventory-batch`'s orphan-invoice matcher picked the single best name-similarity score with no tiebreaker; when multiple contracts of the same vendor cleared the threshold within a small margin (a real Third Bridge case), now disambiguates by billing-date overlap — same signal `planInvoiceContractMatches` already used for a different code path. 2 new Deno tests, full 26-test suite passing.
+
+**R-039 — services vs. billing-account UX**, analyzed against Senthio's equivalent (Platform Account/Billing Account/AccountMaps) before deciding: the account-based cross-contract inclusion mechanism is legitimate and stays (needed for R-026), but found and fixed two real bugs — "+Add Service" rendered with nothing left to add, and the account-based inclusion path pulled in unpriced/unallocated placeholder services (3 of 7 on a real Mimecast invoice) that could never be removed. Fixed by requiring `annual_value > 0` on that inclusion path; regression-checked the legitimate Third Bridge cross-contract case still works.
+
+**R-027 — retroactive adjustments to closed periods.** `invoice_adjustments` already nets into an invoice's variance regardless of period status, but nothing synced that correction into `inventory_period_snapshots` (what Reports/exports actually read) — `close_billing_period`'s adjustment-folding only ran at close time. New trigger mirrors that same insert logic whenever an adjustment targets an already-closed period. Also tried and **reverted** automatic date-to-period inference in `match-invoice-service` — Senthio's own reference confirmed this is a deliberate human judgment call there too (`Adj Inv`/`Adj Year`/`Adj Month`, manually set), not something to automate.
+
+**R-033 — Ask AI POC.** Edgar asked for expert reasoning on OLTP vs. OLAP first: is it safe to build a chat feature (or any dashboard) directly on the transactional schema? Answer — Reports already queries `inventory_period_snapshots`, a denormalized fact table populated at month-end close, not the live OLTP tables; that's already the right separation at this scale, no separate warehouse needed. Built accordingly: new `ask-report-ai` Edge Function using Anthropic's Messages API with tool-use, hard-restricted to calling `report_spend_aggregate` (never raw SQL). Validated on staging (HIG Testing) with real questions — all matched RPC ground truth exactly. One bug found live by Edgar and fixed same-session: answers rendered literal `**Markdown**` asterisks since the frontend shows plain text — fixed via a system-prompt instruction. Deployed to production and re-validated (S4 Market Data). Chat-style multi-turn memory discussed and deliberately deferred — single-turn Q&A for now.
+
+Also ran the Step 6 parity check at session close: staging and production fully in sync (migrations, function list). Found substantial uncommitted local changes to `TECH_DEBT.md` and `docs/security/security-compliance-roadmap.md` from a separate, parallel security-review session — left untouched per Edgar (tracked in that other session, not here).
 
 ---
 
