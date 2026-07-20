@@ -1,10 +1,11 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-17 (Admin page, R-044/R-039 billing fixes, R-027 retroactive adjustments, Ask AI POC — see Recent changes below)*
+*Last updated: 2026-07-20 (Reports Overview cross-filter + monthly pivot table, Vendors/Users drill-down rework — see Recent changes below)*
 
 ---
 
 ## What's live in production
 
+- **Reports Overview cross-filter + monthly pivot table (R-049), deployed 2026-07-20** — clicking a vendor bar, department slice, or pivot row now filters every other visual on the Overview tab to that entity (click again to clear); a chart whose own dimension matches the active filter self-highlights instead of collapsing to one bar. New monthly pivot table (rows = vendor or department, columns = months in the selected range, sticky name column) reuses `report_spend_aggregate`'s existing `group_by='month'`+`split_by` shape — **zero migration or RPC changes**, verified byte-identical on staging/production before building. Vendors/Users tabs (`ReportsDimension.tsx`) also gained a richer drill-down panel (monthly trend chart, summary metrics, tabbed breakdown) above the table when a row is selected. Modeled after a reference Power BI dashboard Santiago referenced; dual-axis combo charts and full Power-BI-style page-wide cross-filter were deliberately not replicated (see R-049 in the backlog for the analysis). Verified against direct RPC ground truth on staging (HIG Testing — Capital Economics vendor filter and "Unallocated" user filter both matched to the cent).
 - **Admin page (R-029), deployed 2026-07-15** — S4-staff-only `/admin` route (gated by new `profiles.is_s4_staff`, not `role` or email domain — both were found unreliable): Organizations tab (create org + module checkboxes, member counts, delete with a zero-data guard across 8 tables), Modules tab (toggle `client_modules` per org), Members tab (invite by email via `auth.admin.inviteUserByEmail`, list members, change role, block demoting an org's last admin). 6 new Edge Functions. Replaces the old manual-SQL `client_modules` workflow entirely.
 - **Ask AI POC (R-033), deployed 2026-07-17** — New "Ask AI" tab in Reports. New `ask-report-ai` Edge Function calls Anthropic's Messages API with tool-use, restricted to calling the existing `report_spend_aggregate` RPC only (never raw SQL, never lets the model compute its own sums) — same OLTP/OLAP reasoning as the rest of Reports: `inventory_period_snapshots` already is the analytical layer, no separate warehouse needed at this scale. Single-turn Q&A (chat-style multi-turn deliberately deferred). Rate-limited 20 questions/org/day via new `ask_ai_queries` table (doubles as audit trail). Validated against real data on both staging (HIG Testing) and production (S4 Market Data) — answers matched the RPC ground truth exactly.
 - **Billing/IRW fixes (R-044, R-039, R-027), deployed 2026-07-17** — R-044: same-vendor contract disambiguation in orphan-invoice matching now breaks name-similarity ties using billing-date overlap (fixed a real Third Bridge mismatch). R-039: `get_invoice_reconciliation`/`create_invoice_distributions`'s account-based service inclusion now requires `annual_value > 0`, excluding unpriced/unallocated placeholder services (fixed on Mimecast, regression-checked against the legitimate Third Bridge cross-contract case); also fixed "+Add Service" showing with nothing addable. R-027: a new trigger syncs `invoice_adjustments` into `inventory_period_snapshots` when the adjustment targets an already-closed period — mirrors what Senthio does manually via `Adj Inv`/`Adj Year`/`Adj Month`; deliberately did **not** add automatic date-to-period inference elsewhere (tried it, reverted — that's a human judgment call there too).
@@ -124,16 +125,13 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Coming next (priority order)
 
-*Re-sequenced 2026-07-17. Since the last update, R-029 (Admin page), R-032 (TS cleanup), R-036/R-037/R-040 (quick wins), R-044, R-039, R-027, and R-033 (Ask AI POC) all shipped to production — see "What's live in production" and Recent changes below. Security work (roadmap A50-A67) is being tracked in a separate session/chat, not here. Santiago is back for a call **2026-07-20**.*
+*Re-sequenced 2026-07-20. Since the last update, R-029 (Admin page), R-032 (TS cleanup), R-036/R-037/R-040 (quick wins), R-044, R-039, R-027, R-033 (Ask AI POC), and R-049 (Reports cross-filter + pivot table) all shipped to production — see "What's live in production" and Recent changes below. Security work (roadmap A50-A67) is being tracked in a separate session/chat, not here.*
 
-1. **For the 2026-07-20 call — show, don't build more first:**
-   - R-026 (billing account, cross-contract) — live in prod since 2026-07-12, Santiago hasn't seen this implementation yet.
-   - Reports module (Overview + Vendors + Users + Ask AI) — live in prod, concrete answer to his reporting ask.
-   - Admin page (R-029) — live in prod, ready to show.
-   - Align R-031 phase 3+ (Budget vs Actuals, vendor deep-dive) scope — don't build ahead of this conversation.
+1. **Santiago call happened 2026-07-20** — transcript to be processed in a separate session (backlog items TBD from that conversation, not yet captured here). R-049 was built same-day partly in response to a reference dashboard Santiago shared before the call.
 2. **Unblocked, can start now:**
    - R-048 — full-name-similarity false positives in vendor matching not fixed by R-046 (e.g. "Real Deals"/"The Real Deal" 0.571) — deliberately deferred pending confirmation of real-world impact.
    - App-wide E2E pass (started 2026-07-14) — still ongoing; findings continue to flow through `/app-review` into the backlog.
+   - Align R-031 phase 3+ (Budget vs Actuals, vendor deep-dive) scope — informed by whatever comes out of the Santiago transcript above, don't build ahead of it.
 3. **Blocked:**
    - R-028 (edit archived-period metadata) — depends on R-003 (reopen a closed period), which depends on Edgar's still-pending conversation with his manager about whether closed periods should be editable at all.
 4. **Data work, not product:**
@@ -190,6 +188,20 @@ Two more decisions from earlier in the week that still need an answer:
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-07-20 session — R-049: Reports cross-filter + monthly pivot table)
+
+Edgar shared screenshots of a reference Power BI dashboard (the one Santiago pointed to before today's call) — comparing it against Source's Reports module found two real gaps: no month-by-month pivot table anywhere, and no click-to-filter cross-filtering (clicking one visual doesn't filter the others). Three options were presented (static table / one-way highlight / full cross-filter); Edgar chose full cross-filter and asked for the work split across backend/design/frontend, matching this project's usual multi-agent flow.
+
+**Backend verification (no migration)** — confirmed both dimensions needed (`split_by='vendor'`, the whole `filter_by`/`filter_value` mechanism) already exist in production, proven safe by `ReportsDimension.tsx`'s existing drill-down. Re-confirmed RLS independently gates org access (function is `SECURITY INVOKER`, `inventory_period_snapshots` has its own RLS policy on top), whitelist byte-identical on staging/production, `EXPLAIN ANALYZE` healthy (caveated: HIG Testing's 237 rows is too small to be a real stress test).
+
+**Design spec** — a 7-item spec covering the cross-filter state model (a "self-highlight family" rule: a chart whose own dimension matches the active filter stays unfiltered and highlights the selection instead of collapsing to one bar — except the new pivot table, which always reflects the filter even on its own dimension), the pivot table's sticky-column/layout details, the active-filter chip, selected/dimmed chart coloring, a lightweight (non-full-page) loading state for filter clicks, and a Split-By/filter collision guard.
+
+**Implementation** — built by Edgar with Codex against the spec (the frontend-impl-agent hit a session limit mid-task), then reviewed here: typecheck clean, build clean, logic verified against all 7 items — two real improvements found beyond the spec (request-sequencing guards preventing stale async responses from clobbering state on rapid clicks; a cleaner single-effect resolution of the two loading states that sidesteps a stale-closure risk the spec had flagged). Edgar separately asked Codex to also rework `ReportsDimension.tsx`'s (Vendors/Users) drill-down into a richer panel (monthly trend chart, summary metrics, tabbed breakdown) — outside this item's original scope but same quality; one review concern (panel renders above the table, not inline with the clicked row) was checked live against the real edge case that mattered (Capital Economics, 35 users) and confirmed clean.
+
+**Validation** — numbers cross-checked against direct `report_spend_aggregate` calls on staging (HIG Testing): Capital Economics vendor filter ($3,715.92/35 users/2 services) and "Unallocated" user filter ($1,126,417.23/9 vendors/14 services) both matched Edgar's screenshots to the cent. Deployed: pushed to `s4sourceio` `main`, published in Lovable, zero backend changes. See `PRODUCT_REVIEW_BACKLOG.md` R-049.
 
 ---
 
