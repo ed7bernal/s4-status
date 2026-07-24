@@ -1,10 +1,11 @@
 # Source S4 — Product Status
-*Last updated: 2026-07-20 (Reports Overview cross-filter + monthly pivot table, Vendors/Users drill-down rework — see Recent changes below)*
+*Last updated: 2026-07-22 (Billing bulk-upload backlog hygiene, full staging/prod parity audit, live R-055 dry-run — see Recent changes below)*
 
 ---
 
 ## What's live in production
 
+- **Inventory Upload — block invoice-only batches (R-053), pushed 2026-07-22** — the general `/inventory/upload` page now refuses invoice-only batches (button disabled, message points to Billing → Upload Invoices instead); contract-only and contract+invoice batches unaffected. Frontend-only — the shared `process-inventory-upload` Edge Function is untouched since `BillingInvoiceUpload.tsx` legitimately still submits invoice-only batches through it. Edgar validated on staging before push. **Pushed to `s4sourceio` `main` — Lovable Publish not confirmed in this session, check before assuming it's live.**
 - **Reports Overview cross-filter + monthly pivot table (R-049), deployed 2026-07-20** — clicking a vendor bar, department slice, or pivot row now filters every other visual on the Overview tab to that entity (click again to clear); a chart whose own dimension matches the active filter self-highlights instead of collapsing to one bar. New monthly pivot table (rows = vendor or department, columns = months in the selected range, sticky name column) reuses `report_spend_aggregate`'s existing `group_by='month'`+`split_by` shape — **zero migration or RPC changes**, verified byte-identical on staging/production before building. Vendors/Users tabs (`ReportsDimension.tsx`) also gained a richer drill-down panel (monthly trend chart, summary metrics, tabbed breakdown) above the table when a row is selected. Modeled after a reference Power BI dashboard Santiago referenced; dual-axis combo charts and full Power-BI-style page-wide cross-filter were deliberately not replicated (see R-049 in the backlog for the analysis). Verified against direct RPC ground truth on staging (HIG Testing — Capital Economics vendor filter and "Unallocated" user filter both matched to the cent).
 - **Admin page (R-029), deployed 2026-07-15** — S4-staff-only `/admin` route (gated by new `profiles.is_s4_staff`, not `role` or email domain — both were found unreliable): Organizations tab (create org + module checkboxes, member counts, delete with a zero-data guard across 8 tables), Modules tab (toggle `client_modules` per org), Members tab (invite by email via `auth.admin.inviteUserByEmail`, list members, change role, block demoting an org's last admin). 6 new Edge Functions. Replaces the old manual-SQL `client_modules` workflow entirely.
 - **Ask AI POC (R-033), deployed 2026-07-17** — New "Ask AI" tab in Reports. New `ask-report-ai` Edge Function calls Anthropic's Messages API with tool-use, restricted to calling the existing `report_spend_aggregate` RPC only (never raw SQL, never lets the model compute its own sums) — same OLTP/OLAP reasoning as the rest of Reports: `inventory_period_snapshots` already is the analytical layer, no separate warehouse needed at this scale. Single-turn Q&A (chat-style multi-turn deliberately deferred). Rate-limited 20 questions/org/day via new `ask_ai_queries` table (doubles as audit trail). Validated against real data on both staging (HIG Testing) and production (S4 Market Data) — answers matched the RPC ground truth exactly.
@@ -125,15 +126,19 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 
 ## Coming next (priority order)
 
-*Re-sequenced 2026-07-20. Since the last update, R-029 (Admin page), R-032 (TS cleanup), R-036/R-037/R-040 (quick wins), R-044, R-039, R-027, R-033 (Ask AI POC), and R-049 (Reports cross-filter + pivot table) all shipped to production — see "What's live in production" and Recent changes below. Security work (roadmap A50-A67) is being tracked in a separate session/chat, not here.*
+*Re-sequenced 2026-07-20; partially superseded since — see the note below before trusting this list at face value.*
+
+**Since 2026-07-20:** the Santiago call happened and produced a whole new shipped feature (R-050, Billing Bulk Invoice Upload, deployed 2026-07-21) plus its follow-ups R-052 through R-059 — none of that is reflected in the numbered list below yet, since it wasn't sequenced into it. Check `PRODUCT_REVIEW_BACKLOG.md` directly for the current state of R-050–R-059 rather than trusting this section for that range. Notably: **R-055 (shared billing-account over-inclusion) is now closed** (2026-07-23, resolved by splitting the account per-service, no code needed) — R-054 (auto-populate `billing_account_id` on high-confidence matches) is no longer blocked by it. R-052/R-053/R-054 have no open dependencies; R-053 shipped this session (see Recent changes above), R-052/R-054 are still unbuilt.
 
 1. **Santiago call happened 2026-07-20** — transcript to be processed in a separate session (backlog items TBD from that conversation, not yet captured here). R-049 was built same-day partly in response to a reference dashboard Santiago shared before the call.
 2. **Unblocked, can start now:**
+   - R-052 — no way back into a Billing invoice-upload batch's results page once you navigate away.
+   - R-054 — auto-populate `billing_account_id` when the account match is already high-confidence (`exact`/`single_account`); no longer blocked by R-055.
    - R-048 — full-name-similarity false positives in vendor matching not fixed by R-046 (e.g. "Real Deals"/"The Real Deal" 0.571) — deliberately deferred pending confirmation of real-world impact.
    - App-wide E2E pass (started 2026-07-14) — still ongoing; findings continue to flow through `/app-review` into the backlog.
    - Align R-031 phase 3+ (Budget vs Actuals, vendor deep-dive) scope — informed by whatever comes out of the Santiago transcript above, don't build ahead of it.
 3. **Blocked:**
-   - R-028 (edit archived-period metadata) — depends on R-003 (reopen a closed period), which depends on Edgar's still-pending conversation with his manager about whether closed periods should be editable at all.
+   - R-028 (edit archived-period metadata) — depends on R-003 (reopen a closed period), which depends on Edgar's still-pending conversation with his manager about whether closed periods should be editable at all. Real operational cost of not having this: two separate sessions now (Grupo C on 2026-06-07, and this session's R-055 dry-run on 2026-07-22) had to hand-reset a closed period directly via SQL because no product feature exists for it.
 4. **Data work, not product:**
    - Deep Tree data cleanup + Monthly pricing normalization (P1) — close out with Santiago (the 2026-07-02 call confirmed the expected-value derivation, just needs the staging data cleaned).
    - Grupo C — line-by-line dollar comparison vs Senthio's `Inventory_R`/`Invoices_Adj` for June, plus the "missing invoices in an already-closed period" report (R-027's mechanism now supports this).
@@ -141,7 +146,7 @@ Full documentation: `.claude/skills/senthio-reference.md` (all 19 tables + queri
 6. **Small loose ends from recent sessions:**
    - Orphan `invoice_distributions` row for GLG on staging (leftover from Grupo C data prep) — decide whether to clean up.
    - Confirm whether "Processing History" (the old standalone Invoice Processing module) is still an active flow — determines whether `InvoiceDetail.tsx` stays dual-purpose or `/invoices` gets deprecated.
-   - Anthropic API key now live as an `ANTHROPIC_API_KEY` secret on both staging and production (pasted in plain text during the R-033 session) — consider rotating.
+   - ~~Anthropic API key now live as an `ANTHROPIC_API_KEY` secret on both staging and production — consider rotating~~ — now formally tracked as **R-058** (found identical on both environments during this session's parity audit; Edgar's call is to migrate to OpenAI rather than just separate the Anthropic keys).
 
 **R-003 note (still relevant):** the Grupo C session had to hand-reset HIG Testing's June period directly in the database (no product feature exists for this) to redo the close live with Santiago — it's a real operational gap, not just a hypothetical, and a hard dependency for R-028. Raise it with him directly.
 
@@ -188,6 +193,24 @@ Two more decisions from earlier in the week that still need an answer:
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-07-22 session — R-053 shipped, backlog hygiene, full parity audit, live R-055 dry-run)
+
+**R-053 — block invoice-only uploads on the general Inventory Upload page.** Now that Billing has its own dedicated invoice-only entry point (R-050), the general `/inventory/upload` page no longer accepts invoice-only batches — contract-only and contract+invoice-together still work exactly as before. Frontend-only change (`InventoryUpload.tsx`); validated on staging, pushed to production.
+
+**Backlog hygiene, three small gaps closed:**
+- A migration from the R-057 session (`20260721000002`, adds `billing_period_id` to `get_billing_invoices`) had been applied to both staging and production via `supabase db push` but never actually committed to git — verified byte-identical against both live databases before committing it, so this is a paperwork fix, not a re-deploy.
+- The R-018 backlog row (Security & Compliance) still said "Triaged," but that work has long since moved to `docs/security/security-compliance-roadmap.md` and is nearly all done there — row updated to point at the roadmap instead of duplicating stale status.
+- Logged **R-058**: found during the parity audit below that `ANTHROPIC_API_KEY` (used by Ask AI) is the exact same key on staging and production — Edgar's own personal key, used as a placeholder when R-033 was built. Edgar's call: migrate Ask AI from Anthropic to OpenAI (not just get separate Anthropic keys) — deliberately deferred, not scoped yet.
+
+**Full staging vs. production parity audit** — the "deep" version of the Step 6 session-close check (hash-diffing every live object, not just migration history), last run 2026-07-12. Compared: all tables/columns, RLS policies, indexes, triggers, extensions, grants, and every function's source (hash-diffed) — all identical. Downloaded and hash-compared the actual deployed bundle for all 20 Edge Functions between staging and production — byte-for-byte identical despite staging/production having different internal version counters (explained by production accumulating extra deploys before staging existed as a separate project). Confirmed no unpushed commits in either repo. Only real gap found: R-058 above.
+
+**Live dry-run of a Billing bulk-invoice batch on staging (HIG Testing), ahead of replicating it with Santiago.** Edgar uploaded a 5-invoice July batch twice (first run reverted after validation, second run kept and closed) to rehearse the full flow end-to-end before doing it live. Both times fully validated directly against the database (not just the UI) — vendor/contract match, reconciliation net_variance, allocation, approval, and (second run) the actual period close. Two real findings came out of this:
+- **R-059** — a GLG invoice didn't auto-link to its one and only contract because `matchInvoicesToContracts` requires both a billing-date overlap *and* an amount match (±5%) to auto-link regardless of how many contracts the vendor has; with exactly one contract, an unmatched amount most likely means the contract's stored value is stale, not that the invoice belongs elsewhere. Logged for later analysis, not resolved now.
+- **A live, deliberate reproduction of R-055** — set Third Bridge's invoice to the shared `G-00024274` billing account on purpose, which pulled Forum Package's expected cost into an invoice that only actually covers Expert Network, forcing a $10,555.33 adjustment to approve. Found an extra wrinkle beyond what R-055 already had documented: once the period closes, that adjustment gets permanently misattributed to the wrong service in the archived snapshot (Expert Network shows an unexplained negative adjustment; Forum Package still shows `missing_invoice`, as if unpaid) — with no way to fix it afterward since Reopen Period (R-003) doesn't exist yet. This concrete example, plus two refinements to Edgar's prepared question list for Santiago, fed directly into the Santiago call the next day that closed out R-055 (see that row in the backlog — resolved by splitting the shared account per-service, no new code).
+- After each dry run, the added invoices/adjustments/distributions/snapshots/upload record were deleted and the period reopened by hand via direct SQL — there's still no product feature for undoing a period close (same gap R-003 would fix), so this had to be done the same way the Grupo C session did it on 2026-06-07.
 
 ---
 
