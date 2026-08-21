@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-08-20 (Inventario manual vendor-first — `create_manual_vendor` desplegado a producción; ver Recent changes)*
+*Last updated: 2026-08-21 (proceso de entrega revisado + CI en ambos repos; sin cambios de producto — ver Recent changes)*
 
 ---
 
@@ -201,6 +201,26 @@ Two more decisions from earlier in the week that still need an answer:
 |---|---|---|
 | Production | `fdcxcivjhobreuseacot` | https://s4source.io |
 | Staging | `fntpcrpmkwyruzplbewq` | https://s4sourceio.lovable.app |
+
+---
+
+## Recent changes (2026-08-21 session — proceso de entrega revisado, script del Step 5.2, CI en ambos repos)
+
+**Sin cambios de producto.** Toda la sesión fue sobre *cómo* se entrega, no sobre qué se entrega. No se desplegó ninguna Edge Function ni migración.
+
+**Diagnóstico que la originó.** Un invite fallido a un cliente nuevo en producción (Fortress Beacon) resultó ser un typo de dominio — `s4maketdata.com` sin la `r`, sin MX ni A — que `invite-user` presentaba como un 500 genérico. De ahí salieron **G-68** (producción no tiene SMTP propio: `smtp_host = null`, `rate_limit_email_sent = 2`, afecta a todo el email transaccional y es bloqueante para onboarding real de un cliente) y **G-69** (el 500 opaco esconde `email_address_invalid`). Ninguno de los dos arreglado todavía.
+
+**El proceso de entrega, evaluado contra práctica de continuous delivery.** Lo que ya estaba bien no se tocó: migraciones como código sin drift (215 archivos / 215 en staging / 215 en producción), staging antes de producción, lotes chicos, trazabilidad. Lo que estaba mal era **el propio documento**: `how-we-build.md` Step 5 y `CLAUDE.md` regla 3 decían commitear *después* de desplegar a producción, contradiciendo a la regla 1 del mismo CLAUDE.md. Los dos modos de falla que eso invita ya habían pasado acá (`match-invoice-service` corriendo 6 semanas desde código inexistente en git; G-28 revirtiendo el workstream TRG en ambos entornos). Se corrigió a **commit antes del deploy**, y se agregaron **Step 7 (verificar en producción)** y una sección de **Rollback**, ninguno de los cuales existía. `how-we-build.md` quedó como una secuencia numerada de 10 pasos sin decisiones abiertas.
+
+**`scripts/diff-live-functions.sh`** — el Step 5.2 (diffear el bundle vivo antes de desplegar) era obligatorio, el más caro de los 10, y tenía un footgun: `supabase functions download` escribe sobre `./supabase/functions/<slug>/` y pisa el fuente propio. Ese perfil es el de una regla que se termina salteando, y una regla salteada es peor que ninguna porque el documento afirma una cobertura que no existe. El script baja a un workdir temporal y **también diffea los helpers de `_shared/`** — no es un extra: G-41 cambió un helper compartido, y un diff por `index.ts` habría estado ciego justo ahí.
+
+**Resultado de correrlo, que cierra un punto que estaba abierto:** las **24 bundles vivas son idénticas byte a byte al fuente local en staging Y producción**, `_shared` incluido. Hasta ahora la paridad se infería de timestamps de deploy; ahora está medida.
+
+**CI, por primera vez (G-70, cerrado).** Había 200 tests pasando en el backend que nadie corría en un push. `.github/workflows/ci.yml` en ambos repos: `s4-backend` = `deno check` sobre las 24 funciones + `deno test` (~2m40s); `s4sourceio` = `tsc --noEmit -p tsconfig.app.json` + `vitest` (~35s). **Verificado en las dos direcciones**, no sólo en verde: se pusheó un test roto a propósito → CI en rojo; se borró → verde. Un gate que sólo se vio pasar no está probado.
+**Lo que CI no compra, anotado explícitamente en el Step 3 para que no se malinterprete:** no encuentra la clase de bug que este proyecto tiene. G-41, G-59, G-67 y G-69 fueron de lógica y de permisos, y los encontró revisión humana. `/code-review` sigue siendo el paso que más importa; CI garantiza que la parte mecánica ocurrió y evita que los tests se pudran sin correr.
+**`eslint` quedó deliberadamente afuera** — 237 errores hoy, sería rojo permanente, y un gate siempre en rojo se ignora junto con los rojos legítimos (**G-71**, abierto).
+
+⚠️ **Salvedad honesta: el proceso todavía no se corrió entero.** Estos cambios ejercitaron los Steps 0-4 y 8-10, pero **los Steps 5, 6 y 7 — deploy a staging, a producción y verificación — siguen sin usarse nunca**, porque ninguno despliega nada. El primer cambio real de backend será el estreno de verdad, y es esperable que ahí aparezcan roces.
 
 ---
 
