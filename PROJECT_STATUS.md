@@ -220,6 +220,8 @@ Two more decisions from earlier in the week that still need an answer:
 **Lo que CI no compra, anotado explícitamente en el Step 3 para que no se malinterprete:** no encuentra la clase de bug que este proyecto tiene. G-41, G-59, G-67 y G-69 fueron de lógica y de permisos, y los encontró revisión humana. `/code-review` sigue siendo el paso que más importa; CI garantiza que la parte mecánica ocurrió y evita que los tests se pudran sin correr.
 **`eslint` quedó deliberadamente afuera** — 237 errores hoy, sería rojo permanente, y un gate siempre en rojo se ignora junto con los rojos legítimos (**G-71**, abierto).
 
+**Higiene de ramas.** Se borraron **11 refs remotas** de sesiones anteriores (`g41`, `g50`, `g50b`, `g52`, `g52b`, `g60`, `g61`, `g66`, `g66b`) más las 3 de esta sesión. Todas verificadas como ancestros de `main` antes de borrar — cero commits perdidos, sus SHA quedan en el historial de `main`. No era cosmética: una rama vieja que está *detrás* de lo que está vivo es exactamente el material de **G-28**, donde desplegar desde `main` desactualizado revirtió en silencio el workstream TRG en ambos entornos. **Ambos repos quedan con sólo `main`**, local y remoto.
+
 ⚠️ **Salvedad honesta: el proceso todavía no se corrió entero.** Estos cambios ejercitaron los Steps 0-4 y 8-10, pero **los Steps 5, 6 y 7 — deploy a staging, a producción y verificación — siguen sin usarse nunca**, porque ninguno despliega nada. El primer cambio real de backend será el estreno de verdad, y es esperable que ahí aparezcan roces.
 
 ---
