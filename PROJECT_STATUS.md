@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-08-21 (proceso de entrega revisado + CI en ambos repos; sin cambios de producto — ver Recent changes)*
+*Last updated: 2026-08-21 (dataset demo ficticio en staging + proceso de entrega revisado + CI en ambos repos; sin cambios de producto — ver Recent changes)*
 
 ---
 
@@ -85,6 +85,18 @@
 - New small client (~50–75 contracts), inventory starts from June 2026 (no historical data needed)
 - Demo with Stephanie de Lucía completed 2026-06-10 (Santiago, Edgar, Bernardo attending)
 - Follow-up feedback now flows through `/app-review` sessions into `PRODUCT_REVIEW_BACKLOG.md`
+
+### S4 Market Data - Demo — dataset 100% ficticio (staging only, 2026-08-21)
+- Org: `56b7eba9-f0af-411f-8b88-f4faed18835c` — *S4 Market Data - Demo*
+- **Para qué existe**: mostrarle el producto en vivo a un cliente potencial y alimentar el proyecto de video. No clona ni reutiliza datos de ningún cliente real, a diferencia de `scripts/demo-seed/`, que clonaba HIG.
+- **Producción está fuera de alcance por decisión explícita.** Los guards de los scripts lo imponen: abortan si no ven el marcador de staging o si ven el de prod. Cuando se decida cargar prod, se cambian conscientemente y en su propio commit.
+- **Contenido**: 10 vendors ficticios (4 compartidos entre 2-3 departamentos, 6 exclusivos), 14 contratos, 18 servicios, 30 `org_users` de padrón, 78 `service_subscriptions`, 8 períodos (ene–jul 2026 cerrados + agosto abierto), 82 facturas, 427 snapshots, 409 distribuciones, 16 PDFs ficticios en Storage. Valor anual activo $2.434.200, repartido entre los 5 departamentos.
+- **Accesos**: solo Ed (admin). Santi no existe en staging y no lo necesita. No se crea ningún usuario: el paso 1 solo inserta la membresía resolviendo el `user_id` por email.
+- **Cabos sueltos deliberados**, para que haya algo que resolver en cámara: 4 facturas con variance exacta (1875 / 900 / 3200 / 640), 1 caso ya resuelto con ajuste retroactivo, 2 facturas con `service_match` pendiente (que por eso no aparecen en Billing — `get_billing_invoices` filtra por `matched`), 9 snapshots `missing_invoice`, 2 contratos con vendor sin confirmar, 1 sin fecha de fin.
+- **Scripts**: `scripts/demo-seed-fictional/`, con README. Idempotentes, con guard de entorno, y `00_revert.sql` + `00_revert_storage.mjs` probados **sobre la org ya poblada** — borran todo incluida la org y dejan las otras 5 orgs con sus conteos intactos.
+- **Verificado**: las 84 facturas originales con `net_variance` 0.0000 por los dos caminos de `get_invoice_reconciliation` (snapshots congelados y suscripciones vivas); las signed URLs resuelven sin autenticación devolviendo `application/pdf`; validación visual de Edgar el 2026-08-21.
+- **El paso 9 no usa service key**: las policies ya autorizan a cualquier miembro de la org a escribir en `documents/<org_id>/…` y a actualizar `pdf_url`, así que va con un `access_token` de usuario. Demostrado con escrituras reales, no leyendo `pg_policy`.
+- ⚠️ **Pendiente si se lleva a producción**: volver a medir los nombres de vendor contra el padrón de prod (que suma los 42 de TRG). El par más cercano al umbral en staging fue *Ironwood Reference Data Ltd.* ~ *ICE Data Pricing & Reference Data, LLC*, 0.421 contra un umbral de 0.5.
 
 ### E2E Demo Dataset (HIG Testing org — staging only)
 - Org: `eb63c19f-a8dd-4f28-8638-b8c522fe4e18`
