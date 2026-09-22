@@ -1,5 +1,5 @@
 # Source S4 — Product Status
-*Last updated: 2026-09-21 (fix de invoices huérfanos en `reconcile-inventory-batch` — G-99, desplegado en staging y producción; backfill de los casos viejos pendiente y sin autorizar, G-100 — ver Recent changes)*
+*Last updated: 2026-09-21 (fix de invoices huérfanos en `reconcile-inventory-batch` — G-99, desplegado en staging y producción y observado en un batch real de producción; backfill de los casos viejos pendiente y sin autorizar, G-100 — ver Recent changes)*
 
 ---
 
@@ -232,7 +232,15 @@ Two more decisions from earlier in the week that still need an answer:
 
 **Validación en staging (v43).** Batch `dde9a7c8` en *HIG Testing*, elegida por no tener choques de `pdf_hash` ni de vendor. **Test positivo 3/3:** los tres invoices perdieron la carrera y reconcile los vinculó a su propio contrato (`linkedCount: 3`). **Punta a punta:** al aprobar los contratos desde la UI, `resolve-vendor-match approve_contract` creó los tres vendors y el backfill por `contract_id` dejó `contracts.vendor_id = invoices.matched_vendor_id`, con servicio, en los tres pares. **El test negativo no se observó directamente**: ningún contrato terminó primero en ese batch. Queda cubierto por evidencia indirecta, detallada en G-99.
 
-**Producción (v22, 19:15:41Z).** Diff previo al deploy: sólo el hunk del fix. Después del deploy: bundle idéntico a `main`, `verify_jwt=false` sigue en las 4 excepciones, y **las 24 funciones de staging y producción son byte a byte iguales a `main`**. Verificación sólo estática: todavía no pasó ningún batch real por el código nuevo.
+**Producción (v22, 19:15:41Z).** Diff previo al deploy: sólo el hunk del fix. Después del deploy: bundle idéntico a `main`, `verify_jwt=false` sigue en las 4 excepciones, y **las 24 funciones de staging y producción son byte a byte iguales a `main`**. Al momento del deploy, la verificación era sólo estática: todavía no había pasado ningún batch real por el código nuevo.
+
+**Primera observación real en producción (mismo día, después del deploy).** Batch `6ec8f62a` en *Fortress Beacon*, una org de prueba dentro de prod, con los mismos 3 contratos + 3 invoices de HIG Testing. Lo procesó reconcile **v22**.
+- **TSX perdió la carrera:** su invoice nació `unmatched` 13,3 s antes de que su contrato terminara. Reconcile lo vinculó a su propio contrato: `GET 200` con el select nuevo, `POST 200` del upsert, UPDATE auditado y `linkedCount: 1`.
+- **FactSet ganó la carrera:** el worker lo vinculó al nacer y reconcile no lo tocó. Así **el caso negativo quedó confirmado en runtime real**; en staging sólo había evidencia indirecta.
+- **0 respuestas 4xx/5xx** en todo el gateway y 0 logs de error o warning durante toda la ventana del batch.
+- El tercer par, Bloomberg, fue por otro camino porque su vendor ya existía en la org. Quedó anotado en S-9, separado de G-99.
+
+Siguen sin observarse el desempate por fechas de R-044 y la igualdad de vendor, que recién aparece al confirmar los contratos en la UI. La lectura fue sólo por el endpoint SQL read-only de la Management API, con un token temporal de producción que se revocó al terminar. Detalle en G-99.
 
 **Fuera de este cierre — G-100, sin autorizar:** los invoices que quedaron huérfanos entre el 2026-07-17 y el 2026-09-21 no se reparan solos. El caso de FactSet en Demo sigue así a propósito, y en producción la población está sin medir.
 
@@ -240,7 +248,7 @@ Two more decisions from earlier in the week that still need an answer:
 - Staging estaba **pausado** (`INACTIVE`) y hubo que restaurarlo desde el Dashboard.
 - La IP de salida rotó (`190.229.50.0`, fuera del allowlist `181.90.245.66/32` de G-40), así que `supabase db query --linked` quedaba bloqueado en el pooler. Se trabajó con la Management API (`/database/query` y `/analytics/endpoints/logs.all`) usando un token personal que sólo ve staging.
 - `diff-live-functions.sh` recibe `prod`, no `production`.
-- El Step 7 en producción quedó limitado a verificación estática, por no tener batch real ni acceso a los logs de producción.
+- El Step 7 en producción quedó limitado a verificación estática, por no tener batch real ni acceso a los logs de producción. Se completó más tarde el mismo día con el batch `6ec8f62a` (ver arriba).
 
 ---
 
